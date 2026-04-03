@@ -33,18 +33,6 @@ const MO_NAMES   = ["January","February","March","April","May","June","July","Au
 const MATERIALS  = ["Granite","Quartz","Marble","Quartzite","Soapstone","Laminate","Butcher Block","Concrete","Other"];
 const JOB_TYPES  = ["Kitchen","Bathroom","Laundry Room","Outdoor Kitchen","Bar","Office","Other"];
 
-const SEED = [
-  { id:1,  customer:"Smith Residence",   jobType:"Kitchen",         material:"Quartz",    status:"open",        amount:4800,  sqft:45,  start:"2026-03-15", close:"2026-04-20", notes:"White quartz, undermount sink",  address:"Austin, TX",        lat:30.2672, lng:-97.7431, createdAt:"2026-02-10" },
-  { id:2,  customer:"Rodriguez Family",  jobType:"Bathroom",        material:"Marble",    status:"quote",       amount:2200,  sqft:28,  start:"2026-04-01", close:"2026-05-10", notes:"Carrara marble, two vanities",   address:"Houston, TX",       lat:29.7604, lng:-95.3698, createdAt:"2026-02-18" },
-  { id:3,  customer:"Thompson Build",    jobType:"Kitchen",         material:"Granite",   status:"won",         amount:6500,  sqft:62,  start:"2026-02-10", close:"2026-03-28", notes:"Black galaxy granite",           address:"Dallas, TX",        lat:32.7767, lng:-96.7970, createdAt:"2026-01-10" },
-  { id:4,  customer:"Chen Residence",    jobType:"Outdoor Kitchen", material:"Granite",   status:"in_progress", amount:8200,  sqft:80,  start:"2026-03-20", close:"2026-05-15", notes:"Weather-resistant granite",      address:"San Antonio, TX",   lat:29.4241, lng:-98.4936, createdAt:"2026-03-01" },
-  { id:5,  customer:"Williams Builders", jobType:"Kitchen",         material:"Quartz",    status:"quote",       amount:12400, sqft:140, start:"2026-04-10", close:"2026-06-01", notes:"4 units, new construction",      address:"Fort Worth, TX",    lat:32.7555, lng:-97.3308, createdAt:"2026-02-25" },
-  { id:6,  customer:"Patel Home",        jobType:"Kitchen",         material:"Quartzite", status:"open",        amount:5600,  sqft:55,  start:"2026-04-05", close:"2026-05-20", notes:"Super White quartzite",          address:"Plano, TX",         lat:33.0198, lng:-96.6989, createdAt:"2026-03-10" },
-  { id:7,  customer:"Anderson Project",  jobType:"Bar",             material:"Concrete",  status:"lost",        amount:3100,  sqft:30,  start:"2026-03-01", close:"2026-04-15", notes:"Custom concrete bar top",        address:"Arlington, TX",     lat:32.7357, lng:-97.1081, createdAt:"2026-02-15" },
-  { id:8,  customer:"Martinez LLC",      jobType:"Kitchen",         material:"Quartz",    status:"won",         amount:9800,  sqft:95,  start:"2026-01-15", close:"2026-02-28", notes:"Commercial remodel",             address:"Corpus Christi, TX",lat:27.8006, lng:-97.3964, createdAt:"2026-01-01" },
-  { id:9,  customer:"Hayes Residence",   jobType:"Bathroom",        material:"Marble",    status:"quote",       amount:3400,  sqft:32,  start:"2026-04-12", close:"2026-06-15", notes:"Master bath, double vanity",     address:"Lubbock, TX",       lat:33.5779, lng:-101.855, createdAt:"2026-02-12" },
-  { id:10, customer:"Griffin Builders",  jobType:"Kitchen",         material:"Quartz",    status:"in_progress", amount:7200,  sqft:75,  start:"2026-03-25", close:"2026-05-30", notes:"New build, 3 kitchens",          address:"El Paso, TX",       lat:31.7619, lng:-106.485, createdAt:"2026-03-05" },
-];
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const fmt$ = v => "$" + (v||0).toLocaleString();
@@ -874,21 +862,24 @@ export default function CountertopCRM() {
   const [tab,     setTab]     = useState("dashboard");
   const [jobs,    setJobs]    = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dbError, setDbError] = useState("");
   const [modal,   setModal]   = useState(null); // null | "add" | job-object
   const [toast,   setToast]   = useState(null);
 
   const showToast = (msg, type="success") => {
     setToast({msg,type});
-    setTimeout(()=>setToast(null), 3000);
+    setTimeout(()=>setToast(null), 3500);
   };
 
   const fetchJobs = useCallback(async () => {
+    setDbError("");
     const { data, error } = await supabase.from("jobs").select("*").order("created_at", { ascending:false });
     if (error) {
-      console.error(error);
-      setJobs(SEED);
+      console.error("Supabase error:", error);
+      setDbError(error.message);
+      setJobs([]);
     } else {
-      setJobs(data.length ? data.map(rowToJob) : SEED);
+      setJobs((data || []).map(rowToJob));
     }
     setLoading(false);
   }, []);
@@ -969,9 +960,24 @@ export default function CountertopCRM() {
 
       {/* Content */}
       <div style={{ maxWidth:1200, margin:"0 auto", padding:"28px 20px" }}>
+        {/* DB connection error banner */}
+        {dbError && (
+          <div style={{ background:"#fef2f2", border:"1.5px solid #fecaca", borderRadius:14, padding:"14px 20px", marginBottom:20, display:"flex", alignItems:"flex-start", gap:12 }}>
+            <span style={{ fontSize:20 }}>⚠️</span>
+            <div>
+              <div style={{ fontWeight:700, color:G.red, marginBottom:4 }}>Database connection error</div>
+              <div style={{ fontSize:13, color:"#7f1d1d", fontFamily:"monospace" }}>{dbError}</div>
+              <div style={{ fontSize:12, color:G.muted, marginTop:6 }}>
+                Check that <b>NEXT_PUBLIC_SUPABASE_URL</b> and <b>NEXT_PUBLIC_SUPABASE_ANON_KEY</b> are set in Vercel → Settings → Environment Variables, then redeploy.
+              </div>
+            </div>
+            <button onClick={fetchJobs} style={{ marginLeft:"auto", background:"none", border:`1px solid #fecaca`, borderRadius:8, padding:"4px 12px", fontSize:12, color:G.red, cursor:"pointer", flexShrink:0 }}>Retry</button>
+          </div>
+        )}
+
         {loading ? (
           <div style={{ textAlign:"center", padding:80, color:G.muted }}>
-            <div style={{ fontSize:40, marginBottom:12 }}>&#9971;</div>
+            <div style={{ fontSize:40, marginBottom:12 }}>⛳</div>
             <div>Loading your jobs...</div>
           </div>
         ) : (
