@@ -736,9 +736,20 @@ function ImportView({ onImportDone }) {
     if (!parsed.length) return;
     setImporting(true);
     try {
-      const { error } = await supabase.from("jobs").upsert(parsed.map(jobToRow), { onConflict:"id" });
-      if (error) throw error;
-      setDone({ count:parsed.length });
+      // Deduplicate by id — keep last occurrence (in case Excel has duplicate Job #s)
+      const seen = new Map();
+      parsed.forEach(j => seen.set(j.id, j));
+      const unique = Array.from(seen.values()).map(jobToRow);
+
+      // Supabase has a max batch size — chunk into 200 rows at a time
+      const CHUNK = 200;
+      for (let i = 0; i < unique.length; i += CHUNK) {
+        const chunk = unique.slice(i, i + CHUNK);
+        const { error } = await supabase.from("jobs").upsert(chunk, { onConflict:"id" });
+        if (error) throw error;
+      }
+
+      setDone({ count:unique.length });
       onImportDone();
     } catch(e) {
       setErrors(prev=>[...prev, String(e.message||e)]);
