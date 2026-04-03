@@ -249,15 +249,28 @@ function Select({ label, value, onChange, options, required }) {
 }
 
 // ─── Job Form Modal ──────────────────────────────────────────────────────
-const BLANK = { customer:"", jobType:"", material:"", status:"quote", amount:"", sqft:"", start:"", close:"", notes:"", address:"" };
+const BLANK = { customer:"", jobType:"Kitchen", material:"Quartz", status:"quote", amount:"", sqft:"", start:"", close:"", notes:"", address:"" };
 
 function JobModal({ job, onSave, onClose }) {
-  const [f, setF] = useState(job ? {
-    customer:job.customer, jobType:job.jobType, material:job.material,
-    status:job.status, amount:String(job.amount), sqft:String(job.sqft),
-    start:job.start, close:job.close, notes:job.notes, address:job.address,
+  const [f, setF]         = useState(job ? {
+    customer:job.customer, jobType:job.jobType||"Kitchen", material:job.material||"Quartz",
+    status:job.status, amount:String(job.amount||""), sqft:String(job.sqft||""),
+    start:job.start||"", close:job.close||"", notes:job.notes||"", address:job.address||"",
   } : { ...BLANK, start:today() });
+  const [saving,  setSaving]  = useState(false);
+  const [saveErr, setSaveErr] = useState("");
   const set = k => v => setF(p=>({...p,[k]:v}));
+
+  const handleSubmit = async () => {
+    if (!f.customer.trim()) return;
+    setSaving(true); setSaveErr("");
+    try {
+      await onSave({ ...f, amount:parseFloat(f.amount)||0, sqft:parseFloat(f.sqft)||0 });
+    } catch(e) {
+      setSaveErr(e?.message || String(e));
+      setSaving(false);
+    }
+  };
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:16 }}>
@@ -267,21 +280,26 @@ function JobModal({ job, onSave, onClose }) {
           <button onClick={onClose} style={{ background:"none", border:"none", fontSize:22, cursor:"pointer", color:G.muted, lineHeight:1 }}>&times;</button>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-          <div style={{ gridColumn:"1/-1" }}><Input label="Customer Name" value={f.customer} onChange={set("customer")} required /></div>
+          <div style={{ gridColumn:"1/-1" }}><Input label="Customer Name" value={f.customer} onChange={set("customer")} required placeholder="e.g. Smith Residence" /></div>
           <Select label="Job Type" value={f.jobType} onChange={set("jobType")} options={JOB_TYPES} />
           <Select label="Material" value={f.material} onChange={set("material")} options={MATERIALS} />
           <Select label="Status" value={f.status} onChange={set("status")} options={Object.keys(STATUSES)} />
-          <Input label="Amount ($)" value={f.amount} onChange={set("amount")} type="number" />
-          <Input label="Sq Ft" value={f.sqft} onChange={set("sqft")} type="number" />
+          <Input label="Amount ($)" value={f.amount} onChange={set("amount")} type="number" placeholder="0" />
+          <Input label="Sq Ft" value={f.sqft} onChange={set("sqft")} type="number" placeholder="0" />
           <Input label="Start Date" value={f.start} onChange={set("start")} type="date" />
           <Input label="Close Date" value={f.close} onChange={set("close")} type="date" />
           <div style={{ gridColumn:"1/-1" }}><Input label="Address / City" value={f.address} onChange={set("address")} placeholder="e.g. Austin, TX" /></div>
-          <div style={{ gridColumn:"1/-1" }}><Input label="Notes" value={f.notes} onChange={set("notes")} /></div>
+          <div style={{ gridColumn:"1/-1" }}><Input label="Notes" value={f.notes} onChange={set("notes")} placeholder="Optional notes..." /></div>
         </div>
+        {saveErr && (
+          <div style={{ marginTop:14, padding:"10px 14px", background:"#fef2f2", border:"1.5px solid #fecaca", borderRadius:10, fontSize:13, color:G.red }}>
+            ⚠ Save failed: {saveErr}
+          </div>
+        )}
         <div style={{ display:"flex", gap:10, marginTop:22, justifyContent:"flex-end" }}>
-          <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-          <Btn onClick={()=>onSave({...f, amount:parseFloat(f.amount)||0, sqft:parseFloat(f.sqft)||0})} disabled={!f.customer.trim()}>
-            {job?"Save Changes":"Add Job"}
+          <Btn variant="ghost" onClick={onClose} disabled={saving}>Cancel</Btn>
+          <Btn onClick={handleSubmit} disabled={!f.customer.trim() || saving}>
+            {saving ? "Saving..." : job ? "Save Changes" : "Add Job"}
           </Btn>
         </div>
       </div>
@@ -350,57 +368,115 @@ function Dashboard({ jobs, onAdd }) {
 }
 
 // ─── Jobs List ────────────────────────────────────────────────────────────
-function JobsView({ jobs, onAdd, onEdit, onDelete }) {
-  const [search, setSearch] = useState("");
+function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete }) {
+  const [search,       setSearch]       = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [selected,     setSelected]     = useState(new Set());
+
   const filtered = useMemo(() => jobs.filter(j => {
     const q = search.toLowerCase();
-    const matchQ = !q || j.customer.toLowerCase().includes(q) || j.address.toLowerCase().includes(q) || j.notes.toLowerCase().includes(q);
-    const matchS = filterStatus==="all" || j.status===filterStatus;
+    const matchQ = !q || j.customer.toLowerCase().includes(q) || (j.address||"").toLowerCase().includes(q) || (j.notes||"").toLowerCase().includes(q);
+    const matchS  = filterStatus==="all" || j.status===filterStatus;
     return matchQ && matchS;
   }), [jobs, search, filterStatus]);
+
+  // Clear selection when filter changes
+  const allIds    = filtered.map(j=>j.id);
+  const allChecked = allIds.length > 0 && allIds.every(id=>selected.has(id));
+  const someChecked = allIds.some(id=>selected.has(id));
+
+  const toggleAll = () => {
+    if (allChecked) setSelected(new Set());
+    else setSelected(new Set(allIds));
+  };
+  const toggle = id => setSelected(prev => {
+    const n = new Set(prev);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+
+  const selectedFiltered = allIds.filter(id=>selected.has(id));
+
+  const handleBulk = () => {
+    onBulkDelete(selectedFiltered);
+    setSelected(new Set());
+  };
 
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <h1 style={{ margin:0, fontSize:26, fontWeight:800, color:G.text }}>&#128203; Jobs</h1>
-        <Btn onClick={onAdd} variant="gold">&#43; Add Job</Btn>
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          {selectedFiltered.length > 0 && (
+            <Btn variant="danger" small onClick={handleBulk}>
+              &#128465; Delete {selectedFiltered.length} Selected
+            </Btn>
+          )}
+          <Btn onClick={onAdd} variant="gold">&#43; Add Job</Btn>
+        </div>
       </div>
+
       <div style={{ display:"flex", gap:10, marginBottom:18, flexWrap:"wrap" }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search jobs..."
           style={{ flex:1, minWidth:180, padding:"9px 14px", borderRadius:10, border:`1.5px solid ${G.border}`, fontSize:14, background:G.card, color:G.text, outline:"none" }} />
-        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
+        <select value={filterStatus} onChange={e=>{ setFilterStatus(e.target.value); setSelected(new Set()); }}
           style={{ padding:"9px 14px", borderRadius:10, border:`1.5px solid ${G.border}`, fontSize:14, background:G.card, color:G.text, outline:"none" }}>
           <option value="all">All Statuses</option>
           {Object.entries(STATUSES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
         </select>
       </div>
+
       <div style={{ background:G.card, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 12px ${G.border}` }}>
-        {filtered.length===0 && <div style={{ padding:32, textAlign:"center", color:G.muted }}>No jobs found</div>}
-        {filtered.map((j,idx) => (
-          <div key={j.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 18px", borderBottom: idx<filtered.length-1?`1px solid ${G.border}`:"none", flexWrap:"wrap", gap:8 }}>
-            <div style={{ flex:1, minWidth:200 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ fontWeight:700, fontSize:15, color:G.text }}>{j.customer}</span>
-                <Badge status={j.status} />
-              </div>
-              <div style={{ fontSize:12, color:G.muted, marginTop:3 }}>
-                {[j.jobType, j.material, j.address].filter(Boolean).join(" · ")}
-              </div>
-              {j.notes && <div style={{ fontSize:12, color:G.muted, marginTop:2, fontStyle:"italic" }}>{j.notes.slice(0,80)}{j.notes.length>80?"…":""}</div>}
-            </div>
-            <div style={{ display:"flex", alignItems:"center", gap:16, flexShrink:0 }}>
-              <div style={{ textAlign:"right" }}>
-                <div style={{ fontWeight:800, fontSize:16, color:G.light }}>{fmt$(j.amount)}</div>
-                <div style={{ fontSize:11, color:G.muted }}>{fmtDate(j.start)} → {fmtDate(j.close)}</div>
-              </div>
-              <div style={{ display:"flex", gap:6 }}>
-                <Btn variant="ghost" small onClick={()=>onEdit(j)}>Edit</Btn>
-                <Btn variant="danger" small onClick={()=>onDelete(j.id)}>&#128465;</Btn>
-              </div>
-            </div>
+        {/* Select-all header */}
+        {filtered.length > 0 && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 18px", background:G.mint, borderBottom:`1px solid ${G.border}` }}>
+            <input type="checkbox" checked={allChecked} ref={el=>{ if(el) el.indeterminate = someChecked && !allChecked; }}
+              onChange={toggleAll}
+              style={{ width:16, height:16, cursor:"pointer", accentColor:G.light }} />
+            <span style={{ fontSize:12, fontWeight:600, color:G.dark }}>
+              {someChecked ? `${selectedFiltered.length} selected` : `${filtered.length} job${filtered.length!==1?"s":""}`}
+            </span>
           </div>
-        ))}
+        )}
+
+        {filtered.length===0 && <div style={{ padding:32, textAlign:"center", color:G.muted }}>No jobs found</div>}
+
+        {filtered.map((j,idx) => {
+          const isChecked = selected.has(j.id);
+          return (
+            <div key={j.id} style={{
+              display:"flex", alignItems:"center", justifyContent:"space-between",
+              padding:"12px 18px",
+              borderBottom: idx<filtered.length-1?`1px solid ${G.border}`:"none",
+              background: isChecked ? G.mint : "white",
+              flexWrap:"wrap", gap:8, transition:"background .1s",
+            }}>
+              <input type="checkbox" checked={isChecked} onChange={()=>toggle(j.id)}
+                style={{ width:16, height:16, cursor:"pointer", flexShrink:0, accentColor:G.light }}
+                onClick={e=>e.stopPropagation()} />
+              <div style={{ flex:1, minWidth:180 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                  <span style={{ fontWeight:700, fontSize:15, color:G.text }}>{j.customer}</span>
+                  <Badge status={j.status} />
+                </div>
+                <div style={{ fontSize:12, color:G.muted, marginTop:3 }}>
+                  {[j.jobType, j.material, j.address].filter(Boolean).join(" · ")}
+                </div>
+                {j.notes && <div style={{ fontSize:12, color:G.muted, marginTop:2, fontStyle:"italic" }}>{j.notes.slice(0,80)}{j.notes.length>80?"…":""}</div>}
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:14, flexShrink:0 }}>
+                <div style={{ textAlign:"right" }}>
+                  <div style={{ fontWeight:800, fontSize:16, color:G.light }}>{fmt$(j.amount)}</div>
+                  <div style={{ fontSize:11, color:G.muted }}>{fmtDate(j.start)} → {fmtDate(j.close)}</div>
+                </div>
+                <div style={{ display:"flex", gap:6 }}>
+                  <Btn variant="ghost" small onClick={()=>onEdit(j)}>Edit</Btn>
+                  <Btn variant="danger" small onClick={()=>onDelete(j.id)}>&#128465;</Btn>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -827,9 +903,9 @@ export default function CountertopCRM() {
       createdAt: isEdit ? modal.createdAt : today(),
     };
     const { error } = await supabase.from("jobs").upsert(jobToRow(job), { onConflict:"id" });
-    if (error) { showToast("Error saving job: "+error.message, "error"); return; }
+    if (error) throw new Error(error.message);   // modal will catch & display
     setModal(null);
-    fetchJobs();
+    await fetchJobs();
     showToast(isEdit ? "Job updated!" : "Job added!");
   };
 
@@ -837,8 +913,17 @@ export default function CountertopCRM() {
     if (!confirm("Delete this job?")) return;
     const { error } = await supabase.from("jobs").delete().eq("id", id);
     if (error) { showToast("Error: "+error.message, "error"); return; }
-    fetchJobs();
+    await fetchJobs();
     showToast("Job deleted");
+  };
+
+  const handleBulkDelete = async (ids) => {
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} job${ids.length!==1?"s":""}? This cannot be undone.`)) return;
+    const { error } = await supabase.from("jobs").delete().in("id", ids);
+    if (error) { showToast("Error: "+error.message, "error"); return; }
+    await fetchJobs();
+    showToast(`${ids.length} job${ids.length!==1?"s":""} deleted`);
   };
 
   const TABS = [
@@ -892,7 +977,7 @@ export default function CountertopCRM() {
         ) : (
           <>
             {tab==="dashboard" && <Dashboard jobs={jobs} onAdd={()=>setModal("add")} />}
-            {tab==="jobs"      && <JobsView  jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onDelete={handleDelete} />}
+            {tab==="jobs"      && <JobsView  jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onDelete={handleDelete} onBulkDelete={handleBulkDelete} />}
             {tab==="customers" && <CustomersView jobs={jobs} />}
             {tab==="import"    && <ImportView onImportDone={()=>{ fetchJobs(); showToast("Import complete! Jobs synced."); }} />}
             {tab==="calendar"  && <CalendarView jobs={jobs} onAdd={()=>setModal("add")} />}
