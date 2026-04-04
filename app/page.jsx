@@ -518,6 +518,12 @@ function JobModal({ job, onSave, onClose }) {
 
 // ─── Dashboard ────────────────────────────────────────────────────────────
 function Dashboard({ jobs, onAdd }) {
+  const now = new Date();
+  const [year,  setYear]  = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth());
+  const [sel,   setSel]   = useState(null);
+  const todayStr = today();
+
   const stats = useMemo(() => {
     const active   = jobs.filter(j=>j.status!=="lost"&&j.status!=="won");
     const pipeline = active.reduce((s,j)=>s+j.amount,0);
@@ -527,49 +533,151 @@ function Dashboard({ jobs, onAdd }) {
     return { pipeline, won, quotes, open, total:jobs.length };
   }, [jobs]);
 
-  const recent = useMemo(()=>[...jobs].sort((a,b)=>(b.createdAt||"").localeCompare(a.createdAt||"")).slice(0,6),[jobs]);
+  // Calendar state
+  const firstDay    = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+
+  const jobsByDate = useMemo(() => {
+    const map = {};
+    jobs.forEach(j => {
+      const key = j.start||j.close; if (!key) return;
+      const [y,m,d] = key.split("-").map(Number);
+      if (y===year && m-1===month) {
+        const dk = String(d);
+        if (!map[dk]) map[dk]=[];
+        map[dk].push(j);
+      }
+    });
+    return map;
+  }, [jobs, year, month]);
+
+  const monthStats = useMemo(() => {
+    const arr = Object.values(jobsByDate).flat();
+    return {
+      pipeline: arr.filter(j=>j.status!=="won"&&j.status!=="lost").reduce((s,j)=>s+j.amount,0),
+      won:      arr.filter(j=>j.status==="won").reduce((s,j)=>s+j.amount,0),
+      count:    arr.length,
+    };
+  }, [jobsByDate]);
+
+  const selJobs   = sel ? (jobsByDate[String(sel)]||[]) : [];
+  const prevMonth = () => { if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1); setSel(null); };
+  const nextMonth = () => { if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1); setSel(null); };
+
+  const cells = [];
+  for (let i=0;i<firstDay;i++) cells.push(null);
+  for (let d=1;d<=daysInMonth;d++) cells.push(d);
 
   const StatCard = ({label,value,sub,icon,grad}) => (
-    <div style={{ background:`linear-gradient(135deg,${grad[0]} 0%,${grad[1]} 100%)`, borderRadius:18, padding:22, color:"#fff", boxShadow:`0 4px 16px ${grad[0]}44` }}>
-      <div style={{ fontSize:26, marginBottom:4 }}>{icon}</div>
-      <div style={{ fontSize:26, fontWeight:800, letterSpacing:-1 }}>{value}</div>
-      <div style={{ fontSize:13, opacity:.85, marginTop:2 }}>{label}</div>
-      {sub&&<div style={{ fontSize:11, opacity:.7, marginTop:3 }}>{sub}</div>}
+    <div style={{ background:`linear-gradient(135deg,${grad[0]} 0%,${grad[1]} 100%)`, borderRadius:18, padding:20, color:"#fff", boxShadow:`0 4px 16px ${grad[0]}44` }}>
+      <div style={{ fontSize:24, marginBottom:4 }}>{icon}</div>
+      <div style={{ fontSize:24, fontWeight:800, letterSpacing:-1 }}>{value}</div>
+      <div style={{ fontSize:12, opacity:.85, marginTop:2 }}>{label}</div>
+      {sub&&<div style={{ fontSize:11, opacity:.7, marginTop:2 }}>{sub}</div>}
     </div>
   );
 
   return (
     <div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
         <div>
           <h1 style={{ margin:0, fontSize:28, fontWeight:800, color:G.text }}>⛳ Dashboard</h1>
-          <p style={{ margin:"4px 0 0", color:G.muted, fontSize:14 }}>Your pipeline overview</p>
+          <p style={{ margin:"4px 0 0", color:G.muted, fontSize:14 }}>Your full pipeline at a glance</p>
         </div>
         <Btn onClick={onAdd} variant="gold">+ Add Job</Btn>
       </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:14, marginBottom:28 }}>
+
+      {/* Stats cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:12, marginBottom:24 }}>
         <StatCard label="Active Pipeline" value={fmt$(stats.pipeline)} icon="💰" grad={[G.light,G.mid]} />
         <StatCard label="Won Revenue"     value={fmt$(stats.won)}      icon="🏆" grad={[G.gold,"#8a6a1a"]} />
         <StatCard label="Open Quotes"     value={stats.quotes}         icon="📋" grad={["#d97706","#b45309"]} sub="awaiting approval" />
         <StatCard label="Active Jobs"     value={stats.open}           icon="🔧" grad={[G.soft,G.light]} sub="in progress" />
         <StatCard label="Total Jobs"      value={stats.total}          icon="📅" grad={["#6366f1","#4338ca"]} />
       </div>
-      <div style={{ background:G.card, borderRadius:18, padding:22, boxShadow:`0 2px 12px ${G.border}` }}>
-        <h2 style={{ margin:"0 0 16px", fontSize:16, fontWeight:700, color:G.text }}>Recent Jobs</h2>
-        {recent.length===0 && <p style={{ color:G.muted, fontSize:14 }}>No jobs yet — add one or import your spreadsheet.</p>}
-        {recent.map(j=>(
-          <div key={j.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${G.border}` }}>
-            <div>
-              <div style={{ fontWeight:600, fontSize:14, color:G.text }}>{j.billTo||j.customer}</div>
-              <div style={{ fontSize:12, color:G.muted }}>{[j.installType,j.projectType,j.address].filter(Boolean).join(" · ")}</div>
-            </div>
-            <div style={{ textAlign:"right" }}>
-              <div style={{ fontWeight:700, color:G.light, fontSize:14 }}>{fmt$(j.amount)}</div>
-              <Badge status={j.status} />
-            </div>
+
+      {/* ── Monthly Stats Banner ── */}
+      <div style={{ background:`linear-gradient(135deg,${G.dark} 0%,${G.mid} 100%)`, borderRadius:16, padding:"16px 22px", marginBottom:20, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <button onClick={prevMonth} style={{ background:"rgba(255,255,255,.15)", border:"none", borderRadius:8, padding:"5px 12px", cursor:"pointer", color:"#fff", fontSize:16 }}>←</button>
+          <span style={{ color:"#fff", fontWeight:800, fontSize:18, minWidth:160, textAlign:"center" }}>{MO_NAMES[month]} {year}</span>
+          <button onClick={nextMonth} style={{ background:"rgba(255,255,255,.15)", border:"none", borderRadius:8, padding:"5px 12px", cursor:"pointer", color:"#fff", fontSize:16 }}>→</button>
+        </div>
+        <div style={{ display:"flex", gap:28 }}>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ color:G.mint, fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:.5 }}>Month Pipeline</div>
+            <div style={{ color:"#fff", fontWeight:800, fontSize:20 }}>{fmt$(monthStats.pipeline)}</div>
           </div>
-        ))}
+          <div style={{ textAlign:"center" }}>
+            <div style={{ color:G.goldLt, fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:.5 }}>Month Won</div>
+            <div style={{ color:G.goldLt, fontWeight:800, fontSize:20 }}>{fmt$(monthStats.won)}</div>
+          </div>
+          <div style={{ textAlign:"center" }}>
+            <div style={{ color:G.mint, fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:.5 }}>Jobs Scheduled</div>
+            <div style={{ color:"#fff", fontWeight:800, fontSize:20 }}>{monthStats.count}</div>
+          </div>
+        </div>
       </div>
+
+      {/* ── Calendar ── */}
+      <div style={{ background:G.card, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 12px ${G.border}`, marginBottom:24 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", background:G.mint }}>
+          {WEEKDAYS.map(d=><div key={d} style={{ padding:"10px 0", textAlign:"center", fontSize:12, fontWeight:700, color:G.dark }}>{d}</div>)}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)" }}>
+          {cells.map((d,i)=>{
+            if (!d) return <div key={`e${i}`} style={{ minHeight:72, background:"#fafafa", borderRight:`1px solid ${G.border}`, borderBottom:`1px solid ${G.border}` }} />;
+            const dk=String(d), dayJobs=jobsByDate[dk]||[];
+            const dateStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const isToday=dateStr===todayStr, isSel=sel===d;
+            const hasWon=dayJobs.some(j=>j.status==="won");
+            const dayTotal=dayJobs.reduce((s,j)=>s+j.amount,0);
+            return (
+              <div key={d} onClick={()=>setSel(isSel?null:d)} style={{
+                minHeight:72, padding:"6px 7px", cursor:"pointer", position:"relative",
+                borderRight:`1px solid ${G.border}`, borderBottom:`1px solid ${G.border}`,
+                background:isSel?G.mint:isToday?"#f0fdf4":"white",
+                boxShadow:isSel?`inset 0 0 0 2px ${G.light}`:isToday?`inset 0 0 0 1.5px ${G.soft}`:"none",
+                transition:"background .1s",
+              }}>
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ fontSize:13, fontWeight:isToday?800:500, color:isToday?G.light:G.text,
+                    background:isToday?G.mint:"transparent", borderRadius:99, padding:isToday?"1px 6px":"0" }}>{d}</span>
+                  {hasWon&&<span style={{ color:G.gold, fontSize:9 }}>★</span>}
+                </div>
+                <div style={{ marginTop:3, display:"flex", flexDirection:"column", gap:2 }}>
+                  {dayJobs.slice(0,2).map(j=>{
+                    const s=STATUSES[j.status]||STATUSES.quote;
+                    return <div key={j.id} style={{ fontSize:10, borderRadius:4, padding:"1px 5px", background:s.bg, color:s.text, borderLeft:`2px solid ${s.dot}`, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{j.billTo||j.customer}</div>;
+                  })}
+                  {dayJobs.length>2&&<div style={{ fontSize:10, color:G.muted, paddingLeft:2 }}>+{dayJobs.length-2} more</div>}
+                </div>
+                {dayTotal>0&&<div style={{ position:"absolute", bottom:4, right:6, fontSize:9, color:G.muted, fontWeight:600 }}>{fmt$(dayTotal)}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Selected day detail */}
+      {sel && selJobs.length>0 && (
+        <div style={{ background:G.card, borderRadius:16, padding:18, marginBottom:20, boxShadow:`0 2px 12px ${G.border}` }}>
+          <h3 style={{ margin:"0 0 12px", fontSize:15, fontWeight:700, color:G.text }}>{MO_NAMES[month]} {sel} — {selJobs.length} job{selJobs.length!==1?"s":""}</h3>
+          {selJobs.map(j=>(
+            <div key={j.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${G.border}` }}>
+              <div>
+                <div style={{ fontWeight:600, fontSize:14, color:G.text }}>{j.billTo||j.customer}</div>
+                <div style={{ fontSize:12, color:G.muted }}>{[j.jobName, j.installType, j.projectType, j.projectManager&&`PM: ${j.projectManager}`].filter(Boolean).join(" · ")}</div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontWeight:700, color:G.light, fontSize:15 }}>{fmt$(j.amount)}</div>
+                <Badge status={j.status} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1020,6 +1128,54 @@ function CalendarView({ jobs, onAdd }) {
   );
 }
 
+// ─── Texas coordinate resolver ───────────────────────────────────────────
+// Maps segment codes and common city strings → approximate TX lat/lng
+const TX_SEG = {
+  SAR:[29.4241,-98.4936], SAN:[29.4241,-98.4936],
+  AUR:[30.2672,-97.7431], ATX:[30.2672,-97.7431],
+  HOU:[29.7604,-95.3698],
+  DAL:[32.7767,-96.7970],
+  FTW:[32.7555,-97.3308],
+};
+const TX_CITY = [
+  ["san antonio",[29.4241,-98.4936]],
+  ["bellezza",   [29.5200,-98.5100]], // SA suburb
+  ["schertz",    [29.5543,-98.2628]],
+  ["new braunfels",[29.7030,-98.1244]],
+  ["austin",     [30.2672,-97.7431]],
+  ["round rock", [30.5083,-97.6789]],
+  ["cedar park", [30.5052,-97.8203]],
+  ["houston",    [29.7604,-95.3698]],
+  ["dallas",     [32.7767,-96.7970]],
+  ["fort worth", [32.7555,-97.3308]],
+  ["plano",      [33.0198,-96.6989]],
+  ["arlington",  [32.7357,-97.1081]],
+  ["el paso",    [31.7619,-106.485]],
+  ["lubbock",    [33.5779,-101.855]],
+  ["corpus",     [27.8006,-97.3964]],
+];
+
+function getJobCoords(j) {
+  if (j.lat && j.lng) return [j.lat, j.lng];
+  // Deterministic tiny spread so pins in the same city don't stack
+  const spread = id => [Math.sin(id * 127.1) * 0.07, Math.cos(id * 311.7) * 0.07];
+  const seg = (j.endUseSegment||"").toUpperCase().trim();
+  if (TX_SEG[seg]) {
+    const [dlat,dlng] = spread(j.id);
+    return [TX_SEG[seg][0]+dlat, TX_SEG[seg][1]+dlng];
+  }
+  const addr = ((j.jobName||"")+" "+(j.address||"")).toLowerCase();
+  for (const [city, coords] of TX_CITY) {
+    if (addr.includes(city)) {
+      const [dlat,dlng] = spread(j.id);
+      return [coords[0]+dlat, coords[1]+dlng];
+    }
+  }
+  // Default: spread across Central Texas
+  const [dlat,dlng] = spread(j.id);
+  return [30.2 + dlat*3, -98.5 + dlng*3];
+}
+
 // ─── Map View ─────────────────────────────────────────────────────────────
 function MapView({ jobs }) {
   const mapRef  = useRef(null);
@@ -1040,7 +1196,7 @@ function MapView({ jobs }) {
         });
       }
       if (!mapRef.current) return;
-      leafRef.current = window.L.map(mapRef.current).setView([31.5,-99.5],6);
+      leafRef.current = window.L.map(mapRef.current).setView([29.8,-98.5],8);
       window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{ attribution:"© OpenStreetMap" }).addTo(leafRef.current);
     };
     load();
@@ -1050,11 +1206,12 @@ function MapView({ jobs }) {
   useEffect(()=>{
     if(!leafRef.current) return;
     markRef.current.forEach(m=>m.remove()); markRef.current=[];
-    jobs.filter(j=>j.lat&&j.lng).forEach(j=>{
+    jobs.forEach(j=>{
+      const coords = getJobCoords(j);
       const s=STATUSES[j.status]||STATUSES.quote;
-      const icon=window.L.divIcon({html:`<div style="width:14px;height:14px;border-radius:50%;background:${s.dot};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,className:"",iconAnchor:[7,7]});
-      const m=window.L.marker([j.lat,j.lng],{icon}).addTo(leafRef.current);
-      m.bindPopup(`<b>${j.billTo||j.customer}</b><br/>${j.address}<br/>${fmt$(j.amount)}`);
+      const icon=window.L.divIcon({html:`<div style="width:13px;height:13px;border-radius:50%;background:${s.dot};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,className:"",iconAnchor:[6,6]});
+      const m=window.L.marker(coords,{icon}).addTo(leafRef.current);
+      m.bindPopup(`<b>${j.billTo||j.customer}</b><br/>${j.jobName||j.address||""}<br/>${j.endUseSegment||""} · ${j.projectType||""}<br/><b>${fmt$(j.amount)}</b>`);
       markRef.current.push(m);
     });
   },[jobs]);
@@ -1062,8 +1219,8 @@ function MapView({ jobs }) {
   return (
     <div>
       <h1 style={{ margin:"0 0 6px", fontSize:26, fontWeight:800, color:G.text }}>🗺 Map</h1>
-      <p style={{ margin:"0 0 16px", color:G.muted, fontSize:14 }}>{jobs.filter(j=>j.lat&&j.lng).length} of {jobs.length} jobs plotted</p>
-      <div ref={mapRef} style={{ height:520, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 16px ${G.border}` }} />
+      <p style={{ margin:"0 0 16px", color:G.muted, fontSize:14 }}>{jobs.length} jobs plotted across Texas</p>
+      <div ref={mapRef} style={{ height:560, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 16px ${G.border}` }} />
     </div>
   );
 }
@@ -1120,7 +1277,6 @@ export default function CountertopCRM() {
     ["jobs","📋 Jobs"],
     ["customers","👥 Customers"],
     ["import","⬇ Import"],
-    ["calendar","📅 Calendar"],
     ["map","🗺 Map"],
   ];
 
@@ -1174,7 +1330,6 @@ export default function CountertopCRM() {
             {tab==="jobs"      && <JobsView     jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onDelete={handleDelete} onBulkDelete={handleBulkDelete} />}
             {tab==="customers" && <CustomersView jobs={jobs} />}
             {tab==="import"    && <ImportView   onImportDone={()=>{ fetchJobs(); showToast("Import complete!"); }} />}
-            {tab==="calendar"  && <CalendarView  jobs={jobs} onAdd={()=>setModal("add")} />}
             {tab==="map"       && <MapView       jobs={jobs} />}
           </>
         )}
