@@ -784,12 +784,132 @@ function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete }) {
   );
 }
 
+// ─── Golf Ball ────────────────────────────────────────────────────────────
+function GolfBall({ job, onClick }) {
+  const s = STATUSES[job.status] || STATUSES.quote;
+  // Label: quote number preferred, else last 5 digits of job id
+  const raw = job.quoteHoldNum || String(job.id);
+  const label = raw.length > 8 ? raw.slice(-7) : raw;
+  const [hov, setHov] = useState(false);
+
+  return (
+    <div
+      onClick={() => onClick(job)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      title={[job.billTo||job.customer, job.jobName, fmt$(job.amount)].filter(Boolean).join("\n")}
+      style={{
+        width:52, height:52, borderRadius:"50%",
+        border:`2px solid ${s.dot}`,
+        background: hov ? s.bg : "#ffffff",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        cursor:"pointer", position:"relative", overflow:"hidden",
+        transform: hov ? "scale(1.13)" : "scale(1)",
+        boxShadow: hov ? `0 4px 14px ${s.dot}55` : `0 1px 4px rgba(0,0,0,.08)`,
+        transition:"all .15s",
+        flexShrink:0,
+      }}>
+      {/* Dimple rings */}
+      <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.18}} viewBox="0 0 52 52">
+        <circle cx="26" cy="26" r="19" fill="none" stroke={s.dot} strokeWidth="0.8" strokeDasharray="2.5 3.5"/>
+        <circle cx="26" cy="26" r="11" fill="none" stroke={s.dot} strokeWidth="0.6" strokeDasharray="1.5 3"/>
+        <circle cx="26" cy="26" r="4"  fill="none" stroke={s.dot} strokeWidth="0.5"/>
+      </svg>
+      <span style={{
+        fontSize: label.length > 6 ? 7 : 8,
+        fontWeight:900, color:s.dot,
+        position:"relative", zIndex:1,
+        textAlign:"center", lineHeight:1.15,
+        padding:"0 3px", wordBreak:"break-all",
+        maxWidth:44,
+      }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// ─── Ball Bucket ──────────────────────────────────────────────────────────
+function BallBucket({ customer, onJobClick }) {
+  const { name, jobs, total } = customer;
+
+  const BALL = 52, GAP = 7, COLS = 3;
+  const ROWS  = Math.ceil(jobs.length / COLS);
+  const gridW = COLS * BALL + (COLS - 1) * GAP;
+  const gridH = ROWS * BALL + (ROWS - 1) * GAP;
+
+  // Bucket geometry (SVG units)
+  const svgW     = gridW + 80;          // card width in SVG units
+  const cx        = svgW / 2;
+  const topRx     = gridW / 2 + 22;     // half-width of rim opening
+  const botRx     = gridW / 2 + 6;      // half-width of base
+  const rimY      = 34;                  // Y centre of top rim
+  const ballsTop  = rimY + 9;            // where balls start
+  const ballsBot  = ballsTop + gridH;
+  const bucketBot = ballsBot + 14;       // Y centre of base
+  const svgH      = bucketBot + 10;
+
+  // Where to render the balls div (pixels from top of svg container)
+  const ballsOffsetTop = ballsTop;
+  const ballsOffsetLeft = (svgW - gridW) / 2;
+
+  return (
+    <div style={{ background:G.card, borderRadius:20, padding:"18px 18px 20px", boxShadow:`0 2px 14px ${G.border}` }}>
+      {/* Header */}
+      <div style={{ fontWeight:800, fontSize:15, color:G.text, marginBottom:2, lineHeight:1.3 }}>{name}</div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+        <span style={{ fontSize:12, color:G.muted }}>{jobs.length} job{jobs.length!==1?"s":""}</span>
+        <span style={{ fontWeight:800, fontSize:15, color:G.light }}>{fmt$(total)}</span>
+      </div>
+
+      {/* Bucket + Balls container */}
+      <div style={{ position:"relative", width:svgW, maxWidth:"100%", margin:"0 auto", height:svgH }}>
+
+        {/* SVG bucket outline — behind balls */}
+        <svg
+          width={svgW} height={svgH}
+          viewBox={`0 0 ${svgW} ${svgH}`}
+          style={{ position:"absolute", top:0, left:0, pointerEvents:"none" }}>
+          {/* Handle arc */}
+          <path
+            d={`M ${cx - topRx * 0.45},${rimY} Q ${cx},${rimY - 24} ${cx + topRx * 0.45},${rimY}`}
+            fill="none" stroke={G.light} strokeWidth="2.5" strokeLinecap="round"/>
+          {/* Top rim ellipse — filled white so balls appear inside */}
+          <ellipse cx={cx} cy={rimY} rx={topRx} ry={8}
+            fill={G.card} stroke={G.light} strokeWidth="2.5"/>
+          {/* Left wall */}
+          <line x1={cx - topRx} y1={rimY} x2={cx - botRx} y2={bucketBot}
+            stroke={G.light} strokeWidth="2.5"/>
+          {/* Right wall */}
+          <line x1={cx + topRx} y1={rimY} x2={cx + botRx} y2={bucketBot}
+            stroke={G.light} strokeWidth="2.5"/>
+          {/* Bottom ellipse */}
+          <ellipse cx={cx} cy={bucketBot} rx={botRx} ry={6}
+            fill={G.card} stroke={G.light} strokeWidth="2.5"/>
+        </svg>
+
+        {/* Balls grid — sits inside the bucket */}
+        <div style={{
+          position:"absolute",
+          top:  ballsOffsetTop,
+          left: ballsOffsetLeft,
+          display:"grid",
+          gridTemplateColumns:`repeat(${COLS}, ${BALL}px)`,
+          gap:GAP,
+        }}>
+          {jobs.map(j => <GolfBall key={j.id} job={j} onClick={onJobClick} />)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Customers ────────────────────────────────────────────────────────────
-function CustomersView({ jobs }) {
+function CustomersView({ jobs, onJobClick }) {
   const customers = useMemo(() => {
     const map = {};
     jobs.forEach(j => {
-      const name = j.billTo||j.customer;
+      const name = j.billTo||j.customer||"Unknown";
       if (!map[name]) map[name] = { name, jobs:[], total:0 };
       map[name].jobs.push(j);
       map[name].total += j.amount;
@@ -799,20 +919,13 @@ function CustomersView({ jobs }) {
 
   return (
     <div>
-      <h1 style={{ margin:"0 0 20px", fontSize:26, fontWeight:800, color:G.text }}>👥 Customers</h1>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:14 }}>
-        {customers.map(c=>(
-          <div key={c.name} style={{ background:G.card, borderRadius:16, padding:18, boxShadow:`0 2px 10px ${G.border}` }}>
-            <div style={{ width:42, height:42, borderRadius:"50%", background:`linear-gradient(135deg,${G.light},${G.mid})`, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontWeight:800, fontSize:18, marginBottom:10 }}>
-              {c.name[0]?.toUpperCase()}
-            </div>
-            <div style={{ fontWeight:700, fontSize:15, color:G.text }}>{c.name}</div>
-            <div style={{ fontSize:13, color:G.muted, margin:"3px 0 8px" }}>{c.jobs.length} job{c.jobs.length!==1?"s":""}</div>
-            <div style={{ fontWeight:800, fontSize:18, color:G.light }}>{fmt$(c.total)}</div>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:8 }}>
-              {c.jobs.map(j=><Badge key={j.id} status={j.status} />)}
-            </div>
-          </div>
+      <h1 style={{ margin:"0 0 6px", fontSize:26, fontWeight:800, color:G.text }}>👥 Customers</h1>
+      <p style={{ margin:"0 0 24px", color:G.muted, fontSize:14 }}>
+        Click any ball to open that job &mdash; {customers.length} customers, {jobs.length} total jobs
+      </p>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:18 }}>
+        {customers.map(c => (
+          <BallBucket key={c.name} customer={c} onJobClick={onJobClick} />
         ))}
       </div>
     </div>
@@ -1181,6 +1294,7 @@ function MapView({ jobs }) {
   const mapRef  = useRef(null);
   const leafRef = useRef(null);
   const markRef = useRef([]);
+  const [leafletReady, setLeafletReady] = useState(false);
 
   useEffect(() => {
     if (leafRef.current) return;
@@ -1198,13 +1312,14 @@ function MapView({ jobs }) {
       if (!mapRef.current) return;
       leafRef.current = window.L.map(mapRef.current).setView([29.8,-98.5],8);
       window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{ attribution:"© OpenStreetMap" }).addTo(leafRef.current);
+      setLeafletReady(true);
     };
     load();
     return ()=>{ if(leafRef.current){leafRef.current.remove();leafRef.current=null;} };
   }, []);
 
   useEffect(()=>{
-    if(!leafRef.current) return;
+    if(!leafRef.current || !leafletReady) return;
     markRef.current.forEach(m=>m.remove()); markRef.current=[];
     jobs.forEach(j=>{
       const coords = getJobCoords(j);
@@ -1214,7 +1329,7 @@ function MapView({ jobs }) {
       m.bindPopup(`<b>${j.billTo||j.customer}</b><br/>${j.jobName||j.address||""}<br/>${j.endUseSegment||""} · ${j.projectType||""}<br/><b>${fmt$(j.amount)}</b>`);
       markRef.current.push(m);
     });
-  },[jobs]);
+  },[jobs, leafletReady]);
 
   return (
     <div>
@@ -1328,7 +1443,7 @@ export default function CountertopCRM() {
           <>
             {tab==="dashboard" && <Dashboard    jobs={jobs} onAdd={()=>setModal("add")} />}
             {tab==="jobs"      && <JobsView     jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onDelete={handleDelete} onBulkDelete={handleBulkDelete} />}
-            {tab==="customers" && <CustomersView jobs={jobs} />}
+            {tab==="customers" && <CustomersView jobs={jobs} onJobClick={j=>setModal(j)} />}
             {tab==="import"    && <ImportView   onImportDone={()=>{ fetchJobs(); showToast("Import complete!"); }} />}
             {tab==="map"       && <MapView       jobs={jobs} />}
           </>
