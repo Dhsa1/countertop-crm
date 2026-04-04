@@ -433,6 +433,62 @@ function Input({ label, value, onChange, type="text", required, placeholder }) {
   );
 }
 
+// ─── Print Job Detail ─────────────────────────────────────────────────────
+function printJob(job) {
+  const s = STATUSES[job.status] || STATUSES.quote;
+  const rows = [
+    ["Bill To",          job.billTo||job.customer],
+    ["Job Name",         job.jobName],
+    ["Quote / Hold #",   job.quoteHoldNum],
+    ["Customer P.O.",    job.customerPo],
+    ["Status",           s.label],
+    ["Amount",           fmt$(job.amount)],
+    ["Sq Ft",            job.sqft ? `${job.sqft} sqft` : ""],
+    ["Install Type",     job.installType],
+    ["End-Use Segment",  job.endUseSegment],
+    ["Project Type",     job.projectType],
+    ["Schedule",         job.scheduleStatus],
+    ["Start Date",       fmtDate(job.start)],
+    ["Close Date",       fmtDate(job.close)],
+    ["Sales Rep 1",      job.salesRep1],
+    ["Sales Rep 2",      job.salesRep2],
+    ["Project Manager",  job.projectManager],
+    ["Location",         job.address],
+    ["Notes",            job.notes],
+  ].filter(([,v])=>v);
+
+  const html = `<!DOCTYPE html><html><head><title>Job Detail — ${job.billTo||job.customer}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; padding: 32px; color: #0d1f14; }
+    .header { display:flex; align-items:center; justify-content:space-between; border-bottom: 3px solid #2d6e44; padding-bottom:16px; margin-bottom:24px; }
+    .logo { font-size:22px; font-weight:900; color:#2d6e44; letter-spacing:-0.5px; }
+    .logo span { color:#b8922a; }
+    .job-title { font-size:20px; font-weight:800; margin:0 0 4px; }
+    .badge { display:inline-block; padding:3px 12px; border-radius:99px; font-size:12px; font-weight:700; background:${s.bg}; color:${s.text}; border:1px solid ${s.dot}; }
+    .amount { font-size:28px; font-weight:900; color:#2d6e44; margin:12px 0 20px; }
+    table { width:100%; border-collapse:collapse; }
+    td { padding: 9px 12px; font-size:14px; border-bottom:1px solid #d4e8da; vertical-align:top; }
+    td:first-child { font-weight:600; color:#5a7a65; width:38%; }
+    .footer { margin-top:32px; font-size:11px; color:#9ca3af; text-align:center; border-top:1px solid #d4e8da; padding-top:12px; }
+    @media print { body { padding:16px; } }
+  </style></head><body>
+  <div class="header">
+    <div class="logo">Fairway<span>Stone</span> CRM</div>
+    <div style="font-size:12px;color:#9ca3af;">Printed ${new Date().toLocaleDateString()}</div>
+  </div>
+  <div class="job-title">${job.billTo||job.customer}</div>
+  <span class="badge">${s.label}</span>
+  <div class="amount">${fmt$(job.amount)}</div>
+  <table>${rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>
+  <div class="footer">FairwayStone CRM &nbsp;·&nbsp; Job #${job.id}</div>
+  <script>window.onload=()=>{ window.print(); }</script>
+  </body></html>`;
+
+  const w = window.open("","_blank","width=750,height=900");
+  w.document.write(html);
+  w.document.close();
+}
+
 // ─── Job Form Modal ────────────────────────────────────────────────────────
 const BLANK = {
   customer:"", billTo:"", jobName:"", customerPo:"", quoteHoldNum:"",
@@ -583,11 +639,17 @@ function JobModal({ job, onSave, onClose }) {
           </div>
         )}
         <div style={{ display:"flex", gap:10, padding:"12px 24px 24px", justifyContent:"space-between", alignItems:"center", borderTop:`1px solid ${G.border}` }}>
-          <div style={{ display:"flex", gap:8 }}>
-            {MODAL_TABS.map((t,i) => (
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            {MODAL_TABS.map((t) => (
               <button key={t.key} onClick={()=>setActiveTab(t.key)}
                 style={{ width:8, height:8, borderRadius:"50%", border:"none", cursor:"pointer", background:activeTab===t.key?G.light:G.border, padding:0, transition:"background .12s" }} />
             ))}
+            {job && (
+              <button onClick={()=>printJob({...f, id:job.id, amount:parseFloat(f.amount)||0})}
+                style={{ marginLeft:8, padding:"5px 12px", borderRadius:8, border:`1.5px solid ${G.border}`, background:"#f9fafb", color:G.muted, fontWeight:600, fontSize:12, cursor:"pointer" }}>
+                🖨 Print
+              </button>
+            )}
           </div>
           <div style={{ display:"flex", gap:10 }}>
             <Btn variant="ghost" onClick={onClose} disabled={saving}>Cancel</Btn>
@@ -664,17 +726,77 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange }) {
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-        <div>
-          <h1 style={{ margin:0, fontSize:28, fontWeight:800, color:G.text }}>⛳ Dashboard</h1>
-          <p style={{ margin:"4px 0 0", color:G.muted, fontSize:14 }}>Your full pipeline at a glance</p>
+      {/* ── Golf Course Hero Banner ── */}
+      <div style={{ borderRadius:20, overflow:"hidden", marginBottom:24, position:"relative", boxShadow:`0 4px 24px rgba(0,0,0,.18)` }}>
+        {/* SVG golf course illustration */}
+        <svg viewBox="0 0 800 220" xmlns="http://www.w3.org/2000/svg" style={{ display:"block", width:"100%", height:"auto" }}>
+          {/* Sky */}
+          <defs>
+            <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#a8d8f0"/>
+              <stop offset="100%" stopColor="#d4eef9"/>
+            </linearGradient>
+            <linearGradient id="hill1" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#4a9e52"/>
+              <stop offset="100%" stopColor="#2d7a35"/>
+            </linearGradient>
+            <linearGradient id="hill2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#5cb865"/>
+              <stop offset="100%" stopColor="#3d9645"/>
+            </linearGradient>
+            <linearGradient id="green" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#6dd475"/>
+              <stop offset="100%" stopColor="#4ab852"/>
+            </linearGradient>
+          </defs>
+          <rect width="800" height="220" fill="url(#sky)"/>
+          {/* Clouds */}
+          <ellipse cx="120" cy="55" rx="55" ry="22" fill="white" opacity=".9"/>
+          <ellipse cx="145" cy="45" rx="38" ry="20" fill="white" opacity=".9"/>
+          <ellipse cx="95"  cy="50" rx="32" ry="16" fill="white" opacity=".9"/>
+          <ellipse cx="360" cy="38" rx="45" ry="18" fill="white" opacity=".85"/>
+          <ellipse cx="385" cy="30" rx="30" ry="16" fill="white" opacity=".85"/>
+          <ellipse cx="340" cy="35" rx="28" ry="14" fill="white" opacity=".85"/>
+          <ellipse cx="620" cy="50" rx="50" ry="20" fill="white" opacity=".8"/>
+          <ellipse cx="648" cy="40" rx="34" ry="18" fill="white" opacity=".8"/>
+          {/* Far hill */}
+          <path d="M0,160 Q200,90 400,130 Q600,160 800,110 L800,220 L0,220 Z" fill="url(#hill1)"/>
+          {/* Mid hill */}
+          <path d="M0,185 Q150,140 320,160 Q500,180 680,145 Q740,135 800,150 L800,220 L0,220 Z" fill="url(#hill2)"/>
+          {/* Foreground green */}
+          <path d="M0,200 Q250,175 500,190 Q650,198 800,180 L800,220 L0,220 Z" fill="url(#green)"/>
+          {/* Hole cup shadow */}
+          <ellipse cx="630" cy="194" rx="14" ry="5" fill="#2a6e2a" opacity=".5"/>
+          {/* Hole cup */}
+          <ellipse cx="630" cy="192" rx="10" ry="4" fill="#1a3a1a"/>
+          {/* Flag pole */}
+          <line x1="630" y1="192" x2="630" y2="145" stroke="#e8e8e8" strokeWidth="2.5" strokeLinecap="round"/>
+          {/* Flag */}
+          <path d="M630,145 L660,155 L630,165 Z" fill="#e53535"/>
+          {/* Fairway stripe highlights */}
+          <path d="M0,210 Q200,200 400,207 Q600,213 800,205" fill="none" stroke="#7ae07a" strokeWidth="3" opacity=".35"/>
+        </svg>
+
+        {/* Overlay text + button */}
+        <div style={{
+          position:"absolute", inset:0, display:"flex", flexDirection:"column",
+          justifyContent:"center", padding:"0 28px",
+          background:"linear-gradient(90deg,rgba(10,31,18,.55) 0%,rgba(10,31,18,.1) 60%,transparent 100%)",
+        }}>
+          <div style={{ color:"#fff", fontWeight:900, fontSize:26, letterSpacing:-.5, textShadow:"0 2px 8px rgba(0,0,0,.4)" }}>
+            FairwayStone CRM
+          </div>
+          <div style={{ color:"rgba(255,255,255,.85)", fontSize:13, marginTop:4, textShadow:"0 1px 4px rgba(0,0,0,.3)" }}>
+            {stats.total} jobs · {fmt$(stats.pipeline)} active pipeline
+          </div>
+          <div style={{ marginTop:14 }}>
+            <Btn onClick={onAdd} variant="gold">+ Add Job</Btn>
+          </div>
         </div>
-        <Btn onClick={onAdd} variant="gold">+ Add Job</Btn>
       </div>
 
       {/* Stats cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:12, marginBottom:24 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12, marginBottom:24 }}>
         <StatCard label="Active Pipeline" value={fmt$(stats.pipeline)} icon="💰" grad={[G.light,G.mid]} />
         <StatCard label="Won Revenue"     value={fmt$(stats.won)}      icon="🏆" grad={[G.gold,"#8a6a1a"]} />
         <StatCard label="Open Quotes"     value={stats.quotes}         icon="📋" grad={["#d97706","#b45309"]} sub="awaiting approval" />
@@ -750,8 +872,15 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange }) {
       {sel && selJobs.length>0 && (
         <div style={{ background:G.card, borderRadius:16, padding:18, marginBottom:20, boxShadow:`0 2px 12px ${G.border}` }}>
           <h3 style={{ margin:"0 0 12px", fontSize:15, fontWeight:700, color:G.text }}>{MO_NAMES[month]} {sel} — {selJobs.length} job{selJobs.length!==1?"s":""}</h3>
-          {selJobs.map(j=>(
-            <div key={j.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${G.border}`, gap:8 }}>
+          {selJobs.map((j,idx)=>(
+            <div key={j.id} onClick={()=>onEdit&&onEdit(j)} style={{
+              display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"10px 0", borderBottom:idx<selJobs.length-1?`1px solid ${G.border}`:"none",
+              gap:8, cursor:"pointer", borderRadius:8,
+              transition:"background .1s",
+            }}
+            onMouseEnter={e=>e.currentTarget.style.background=G.mint}
+            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontWeight:600, fontSize:14, color:G.text }}>{j.billTo||j.customer}</div>
                 <div style={{ fontSize:12, color:G.muted }}>{[j.jobName, j.installType, j.projectType].filter(Boolean).join(" · ")}</div>
@@ -760,6 +889,7 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange }) {
                 <div style={{ fontWeight:700, color:G.light, fontSize:15 }}>{fmt$(j.amount)}</div>
                 <Badge status={j.status} />
               </div>
+              <span style={{ fontSize:16, color:G.muted }}>›</span>
             </div>
           ))}
         </div>
@@ -1421,104 +1551,7 @@ function CalendarView({ jobs, onAdd }) {
   );
 }
 
-// ─── Texas coordinate resolver ───────────────────────────────────────────
-// Maps segment codes and common city strings → approximate TX lat/lng
-const TX_SEG = {
-  SAR:[29.4241,-98.4936], SAN:[29.4241,-98.4936],
-  AUR:[30.2672,-97.7431], ATX:[30.2672,-97.7431],
-  HOU:[29.7604,-95.3698],
-  DAL:[32.7767,-96.7970],
-  FTW:[32.7555,-97.3308],
-};
-const TX_CITY = [
-  ["san antonio",[29.4241,-98.4936]],
-  ["bellezza",   [29.5200,-98.5100]], // SA suburb
-  ["schertz",    [29.5543,-98.2628]],
-  ["new braunfels",[29.7030,-98.1244]],
-  ["austin",     [30.2672,-97.7431]],
-  ["round rock", [30.5083,-97.6789]],
-  ["cedar park", [30.5052,-97.8203]],
-  ["houston",    [29.7604,-95.3698]],
-  ["dallas",     [32.7767,-96.7970]],
-  ["fort worth", [32.7555,-97.3308]],
-  ["plano",      [33.0198,-96.6989]],
-  ["arlington",  [32.7357,-97.1081]],
-  ["el paso",    [31.7619,-106.485]],
-  ["lubbock",    [33.5779,-101.855]],
-  ["corpus",     [27.8006,-97.3964]],
-];
 
-function getJobCoords(j) {
-  if (j.lat && j.lng) return [j.lat, j.lng];
-  // Deterministic tiny spread so pins in the same city don't stack
-  const spread = id => [Math.sin(id * 127.1) * 0.07, Math.cos(id * 311.7) * 0.07];
-  const seg = (j.endUseSegment||"").toUpperCase().trim();
-  if (TX_SEG[seg]) {
-    const [dlat,dlng] = spread(j.id);
-    return [TX_SEG[seg][0]+dlat, TX_SEG[seg][1]+dlng];
-  }
-  const addr = ((j.jobName||"")+" "+(j.address||"")).toLowerCase();
-  for (const [city, coords] of TX_CITY) {
-    if (addr.includes(city)) {
-      const [dlat,dlng] = spread(j.id);
-      return [coords[0]+dlat, coords[1]+dlng];
-    }
-  }
-  // Default: spread across Central Texas
-  const [dlat,dlng] = spread(j.id);
-  return [30.2 + dlat*3, -98.5 + dlng*3];
-}
-
-// ─── Map View ─────────────────────────────────────────────────────────────
-function MapView({ jobs }) {
-  const mapRef  = useRef(null);
-  const leafRef = useRef(null);
-  const markRef = useRef([]);
-  const [leafletReady, setLeafletReady] = useState(false);
-
-  useEffect(() => {
-    if (leafRef.current) return;
-    const load = async () => {
-      if (!window.L) {
-        await new Promise((res,rej)=>{
-          const css=document.createElement("link"); css.rel="stylesheet";
-          css.href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
-          document.head.appendChild(css);
-          const s=document.createElement("script");
-          s.src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
-          s.onload=res; s.onerror=rej; document.head.appendChild(s);
-        });
-      }
-      if (!mapRef.current) return;
-      leafRef.current = window.L.map(mapRef.current).setView([29.8,-98.5],8);
-      window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{ attribution:"© OpenStreetMap" }).addTo(leafRef.current);
-      setLeafletReady(true);
-    };
-    load();
-    return ()=>{ if(leafRef.current){leafRef.current.remove();leafRef.current=null;} };
-  }, []);
-
-  useEffect(()=>{
-    if(!leafRef.current || !leafletReady) return;
-    markRef.current.forEach(m=>m.remove()); markRef.current=[];
-    jobs.forEach(j=>{
-      const coords = getJobCoords(j);
-      const s=STATUSES[j.status]||STATUSES.quote;
-      const icon=window.L.divIcon({html:`<div style="width:13px;height:13px;border-radius:50%;background:${s.dot};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,className:"",iconAnchor:[6,6]});
-      const m=window.L.marker(coords,{icon}).addTo(leafRef.current);
-      m.bindPopup(`<b>${j.billTo||j.customer}</b><br/>${j.jobName||j.address||""}<br/>${j.endUseSegment||""} · ${j.projectType||""}<br/><b>${fmt$(j.amount)}</b>`);
-      markRef.current.push(m);
-    });
-  },[jobs, leafletReady]);
-
-  return (
-    <div>
-      <h1 style={{ margin:"0 0 6px", fontSize:26, fontWeight:800, color:G.text }}>🗺 Map</h1>
-      <p style={{ margin:"0 0 16px", color:G.muted, fontSize:14 }}>{jobs.length} jobs plotted across Texas</p>
-      <div ref={mapRef} style={{ height:560, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 16px ${G.border}` }} />
-    </div>
-  );
-}
 
 // ─── App Shell ────────────────────────────────────────────────────────────
 export default function CountertopCRM() {
@@ -1582,7 +1615,6 @@ export default function CountertopCRM() {
     ["jobs","📋","Jobs"],
     ["customers","👥","Customers"],
     ["import","⬇","Import"],
-    ["map","🗺","Map"],
   ];
 
   // Count badges for tabs
@@ -1659,7 +1691,6 @@ export default function CountertopCRM() {
             {tab==="jobs"      && <JobsView     jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onDelete={handleDelete} onBulkDelete={handleBulkDelete} onStatusChange={handleStatusChange} />}
             {tab==="customers" && <CustomersView jobs={jobs} onJobClick={j=>setModal(j)} />}
             {tab==="import"    && <ImportView   onImportDone={()=>{ fetchJobs(); showToast("Import complete!"); }} />}
-            {tab==="map"       && <MapView       jobs={jobs} />}
           </>
         )}
       </div>
