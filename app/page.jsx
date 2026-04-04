@@ -145,6 +145,54 @@ function jobToRow(j) {
   };
 }
 
+// ─── Mobile hook ──────────────────────────────────────────────────────────
+function useIsMobile() {
+  const [mobile, setMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 700 : false);
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth < 700);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+  return mobile;
+}
+
+// ─── Excel Export ─────────────────────────────────────────────────────────
+async function exportJobsToExcel(jobs) {
+  const XLSX = await new Promise((res, rej) => {
+    if (window.XLSX) { res(window.XLSX); return; }
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    s.onload = () => res(window.XLSX); s.onerror = rej;
+    document.head.appendChild(s);
+  });
+  const rows = jobs.map(j => ({
+    "Job #":           j.id,
+    "Quote/Hold #":    j.quoteHoldNum||"",
+    "Bill To":         j.billTo||"",
+    "Customer":        j.customer||"",
+    "Job Name":        j.jobName||"",
+    "Status":          STATUSES[j.status]?.label||j.status,
+    "Amount":          j.amount||0,
+    "Sq Ft":           j.sqft||0,
+    "Install Type":    j.installType||"",
+    "End-Use Segment": j.endUseSegment||"",
+    "Project Type":    j.projectType||"",
+    "Schedule":        j.scheduleStatus||"",
+    "Start Date":      j.start||"",
+    "Close Date":      j.close||"",
+    "Customer P.O.":   j.customerPo||"",
+    "Sales Rep 1":     j.salesRep1||"",
+    "Sales Rep 2":     j.salesRep2||"",
+    "Project Manager": j.projectManager||"",
+    "Location":        j.address||"",
+    "Notes":           j.notes||"",
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Jobs");
+  XLSX.writeFile(wb, `jobs-export-${today()}.xlsx`);
+}
+
 // ─── Excel Import Parser ──────────────────────────────────────────────────
 const loadXLSX = () => new Promise((resolve, reject) => {
   if (window.XLSX) { resolve(window.XLSX); return; }
@@ -394,8 +442,15 @@ const BLANK = {
   start:"", close:"", notes:"", address:"",
 };
 
+const MODAL_TABS = [
+  { key:"info",      label:"📋 Job Info" },
+  { key:"financials",label:"💰 Financials" },
+  { key:"schedule",  label:"📅 Schedule" },
+  { key:"team",      label:"👥 Team" },
+];
+
 function JobModal({ job, onSave, onClose }) {
-  const [f,       setF]       = useState(job ? {
+  const [f,        setF]        = useState(job ? {
     customer:       job.customer,
     billTo:         job.billTo||"",
     jobName:        job.jobName||"",
@@ -418,12 +473,13 @@ function JobModal({ job, onSave, onClose }) {
     notes:          job.notes||"",
     address:        job.address||"",
   } : { ...BLANK, start:today() });
-  const [saving,  setSaving]  = useState(false);
-  const [saveErr, setSaveErr] = useState("");
+  const [saving,   setSaving]   = useState(false);
+  const [saveErr,  setSaveErr]  = useState("");
+  const [activeTab,setActiveTab]= useState("info");
   const set = k => v => setF(p=>({...p,[k]:v}));
 
   const handleSubmit = async () => {
-    if (!f.customer.trim() && !f.billTo.trim()) { setSaveErr("Enter a customer name or bill-to company."); return; }
+    if (!f.customer.trim() && !f.billTo.trim()) { setSaveErr("Enter a customer name or bill-to company."); setActiveTab("info"); return; }
     setSaving(true); setSaveErr("");
     try {
       const data = { ...f, amount:parseFloat(f.amount)||0, sqft:parseFloat(f.sqft)||0 };
@@ -435,81 +491,110 @@ function JobModal({ job, onSave, onClose }) {
     }
   };
 
-  const SectionHead = ({ title }) => (
-    <div style={{ gridColumn:"1/-1", borderBottom:`1.5px solid ${G.border}`, paddingBottom:6, marginTop:6 }}>
-      <span style={{ fontSize:11, fontWeight:800, color:G.muted, textTransform:"uppercase", letterSpacing:.8 }}>{title}</span>
-    </div>
-  );
+  // Backdrop click to close
+  const handleBackdrop = e => { if (e.target === e.currentTarget) onClose(); };
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:16 }}>
-      <div style={{ background:G.card, borderRadius:20, padding:28, width:"100%", maxWidth:640, maxHeight:"92vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(0,0,0,.35)" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-          <h2 style={{ margin:0, fontSize:20, fontWeight:800, color:G.text }}>{job ? "Edit Job" : "Add New Job"}</h2>
-          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:24, cursor:"pointer", color:G.muted }}>&times;</button>
+    <div onClick={handleBackdrop} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:1000, padding:"0" }}>
+      <div style={{ background:G.card, borderRadius:"20px 20px 0 0", width:"100%", maxWidth:620, maxHeight:"94vh", display:"flex", flexDirection:"column", boxShadow:"0 -8px 40px rgba(0,0,0,.35)" }}>
+
+        {/* Header */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"20px 24px 0" }}>
+          <h2 style={{ margin:0, fontSize:19, fontWeight:800, color:G.text }}>{job ? "Edit Job" : "Add New Job"}</h2>
+          <button onClick={onClose} style={{ background:G.mint, border:"none", width:32, height:32, borderRadius:"50%", fontSize:18, cursor:"pointer", color:G.dark, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
         </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-
-          <SectionHead title="Customer & Reference" />
-          <ComboInput label="Bill To Customer" value={f.billTo}        onChange={v=>{ set("billTo")(v); if(!f.customer) set("customer")(v); }} optKey="billTo" placeholder="Billing company (e.g. Sterling Creek Custom Homes)" />
-          <Input      label="Customer Name"    value={f.customer}     onChange={set("customer")} placeholder="Individual name if different from Bill To" />
-          <div style={{ gridColumn:"1/-1" }}>
-            <Input    label="Job Name"         value={f.jobName||""}  onChange={set("jobName")} placeholder="Project / site name (e.g. Wolslager Residence 210 E Tarrant)" />
-          </div>
-          <Input      label="Customer P.O. #"  value={f.customerPo}  onChange={set("customerPo")} placeholder="e.g. 18013649-000" />
-          <Input      label="Quote / Hold #"   value={f.quoteHoldNum} onChange={set("quoteHoldNum")} placeholder="e.g. 9219-4" />
-
-          <SectionHead title="Job Classification" />
-          <ComboInput label="Type"             value={f.installType}    onChange={set("installType")}    optKey="installType"    placeholder="Install, Fab..." />
-          <ComboInput label="End-Use Segment"  value={f.endUseSegment}  onChange={set("endUseSegment")}  optKey="endUseSegment"  placeholder="SAR, AUR..." />
-          <ComboInput label="Project Type"     value={f.projectType}    onChange={set("projectType")}    optKey="projectType"    placeholder="Custom Hi, Production Low..." />
-          <ComboInput label="Schedule"         value={f.scheduleStatus} onChange={set("scheduleStatus")} optKey="scheduleStatus" placeholder="scheduled, hold..." />
-          <ComboInput label="Job Category"     value={f.jobType}        onChange={set("jobType")}        optKey="jobType"        placeholder="Kitchen, Bathroom..." />
-          <ComboInput label="Material"         value={f.material}       onChange={set("material")}       optKey="material"       placeholder="Granite, Quartz..." />
-
-          <SectionHead title="Team" />
-          <ComboInput label="Sales Rep 1"      value={f.salesRep1}      onChange={set("salesRep1")}      optKey="salesRep"       placeholder="Name..." />
-          <ComboInput label="Sales Rep 2"      value={f.salesRep2}      onChange={set("salesRep2")}      optKey="salesRep"       placeholder="Name (optional)" />
-          <div style={{ gridColumn:"1/-1" }}>
-            <ComboInput label="Project Manager" value={f.projectManager} onChange={set("projectManager")} optKey="projectManager" placeholder="Name..." />
-          </div>
-
-          <SectionHead title="Financials & Status" />
-          <Input label="Amount ($)"  value={f.amount} onChange={set("amount")} type="number" placeholder="0" />
-          <Input label="Sq Ft"       value={f.sqft}   onChange={set("sqft")}   type="number" placeholder="0" />
-          <div style={{ gridColumn:"1/-1", display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
-            <Input label="Start Date" value={f.start} onChange={set("start")} type="date" />
-            <Input label="Close Date" value={f.close} onChange={set("close")} type="date" />
-            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              <label style={{ fontSize:12, fontWeight:600, color:G.muted, textTransform:"uppercase", letterSpacing:.5 }}>Status</label>
-              <select value={f.status} onChange={e=>set("status")(e.target.value)}
-                style={{ padding:"10px 14px", borderRadius:10, border:`1.5px solid ${G.border}`, fontSize:14, background:G.card, color:G.text, outline:"none", height:44 }}>
-                {Object.entries(STATUSES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <SectionHead title="Location & Notes" />
-          <div style={{ gridColumn:"1/-1" }}>
-            <Input label="Address / Location" value={f.address} onChange={set("address")} placeholder="Job site address or city" />
-          </div>
-          <div style={{ gridColumn:"1/-1" }}>
-            <Input label="Notes" value={f.notes} onChange={set("notes")} placeholder="Any additional notes..." />
-          </div>
-
+        {/* Tab bar */}
+        <div style={{ display:"flex", borderBottom:`1.5px solid ${G.border}`, margin:"14px 24px 0", gap:0 }}>
+          {MODAL_TABS.map(t => (
+            <button key={t.key} onClick={()=>setActiveTab(t.key)} style={{
+              flex:1, padding:"10px 4px", border:"none", background:"transparent",
+              fontSize:12, fontWeight:activeTab===t.key?700:500,
+              color:activeTab===t.key?G.light:G.muted,
+              borderBottom:activeTab===t.key?`2.5px solid ${G.light}`:"2.5px solid transparent",
+              cursor:"pointer", whiteSpace:"nowrap", transition:"all .12s",
+            }}>{t.label}</button>
+          ))}
         </div>
 
+        {/* Tab content */}
+        <div style={{ flex:1, overflowY:"auto", padding:"20px 24px" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+
+            {activeTab==="info" && <>
+              <div style={{ gridColumn:"1/-1" }}>
+                <ComboInput label="Bill To Customer *" value={f.billTo} onChange={v=>{ set("billTo")(v); if(!f.customer) set("customer")(v); }} optKey="billTo" placeholder="Billing company name" />
+              </div>
+              <Input label="Customer Name" value={f.customer} onChange={set("customer")} placeholder="Individual if different" />
+              <Input label="Quote / Hold #" value={f.quoteHoldNum} onChange={set("quoteHoldNum")} placeholder="e.g. 9219-4" />
+              <div style={{ gridColumn:"1/-1" }}>
+                <Input label="Job Name" value={f.jobName} onChange={set("jobName")} placeholder="Project / site name" />
+              </div>
+              <Input label="Customer P.O. #" value={f.customerPo} onChange={set("customerPo")} placeholder="e.g. 18013649-000" />
+              <Input label="Address / Location" value={f.address} onChange={set("address")} placeholder="City or job site" />
+            </>}
+
+            {activeTab==="financials" && <>
+              <Input label="Amount ($)" value={f.amount} onChange={set("amount")} type="number" placeholder="0" />
+              <Input label="Sq Ft"      value={f.sqft}   onChange={set("sqft")}   type="number" placeholder="0" />
+              <div style={{ display:"flex", flexDirection:"column", gap:5, gridColumn:"1/-1" }}>
+                <label style={{ fontSize:12, fontWeight:600, color:G.muted, textTransform:"uppercase", letterSpacing:.5 }}>Status</label>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                  {Object.entries(STATUSES).map(([k,v])=>(
+                    <button key={k} onClick={()=>set("status")(k)} style={{
+                      padding:"8px 16px", borderRadius:20, border:`2px solid ${f.status===k?v.dot:G.border}`,
+                      background:f.status===k?v.bg:"#f9fafb", color:f.status===k?v.text:G.muted,
+                      fontWeight:f.status===k?700:500, fontSize:13, cursor:"pointer", transition:"all .12s",
+                    }}>{v.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ gridColumn:"1/-1" }}>
+                <Input label="Notes" value={f.notes} onChange={set("notes")} placeholder="Any additional notes..." />
+              </div>
+            </>}
+
+            {activeTab==="schedule" && <>
+              <Input label="Start Date"  value={f.start} onChange={set("start")} type="date" />
+              <Input label="Close Date"  value={f.close} onChange={set("close")} type="date" />
+              <ComboInput label="Install Type"    value={f.installType}    onChange={set("installType")}    optKey="installType"    placeholder="Install, Fab..." />
+              <ComboInput label="Schedule Status" value={f.scheduleStatus} onChange={set("scheduleStatus")} optKey="scheduleStatus" placeholder="scheduled, hold..." />
+              <ComboInput label="End-Use Segment" value={f.endUseSegment}  onChange={set("endUseSegment")}  optKey="endUseSegment"  placeholder="SAR, AUR..." />
+              <ComboInput label="Project Type"    value={f.projectType}    onChange={set("projectType")}    optKey="projectType"    placeholder="Custom Hi..." />
+              <ComboInput label="Job Category"    value={f.jobType}        onChange={set("jobType")}        optKey="jobType"        placeholder="Kitchen, Bathroom..." />
+              <ComboInput label="Material"        value={f.material}       onChange={set("material")}       optKey="material"       placeholder="Granite, Quartz..." />
+            </>}
+
+            {activeTab==="team" && <>
+              <ComboInput label="Sales Rep 1"     value={f.salesRep1}      onChange={set("salesRep1")}      optKey="salesRep"       placeholder="Name..." />
+              <ComboInput label="Sales Rep 2"     value={f.salesRep2}      onChange={set("salesRep2")}      optKey="salesRep"       placeholder="Optional" />
+              <div style={{ gridColumn:"1/-1" }}>
+                <ComboInput label="Project Manager" value={f.projectManager} onChange={set("projectManager")} optKey="projectManager" placeholder="Name..." />
+              </div>
+            </>}
+
+          </div>
+        </div>
+
+        {/* Footer */}
         {saveErr && (
-          <div style={{ marginTop:14, padding:"10px 14px", background:"#fef2f2", border:"1.5px solid #fecaca", borderRadius:10, fontSize:13, color:G.red }}>
+          <div style={{ margin:"0 24px 8px", padding:"10px 14px", background:"#fef2f2", border:"1.5px solid #fecaca", borderRadius:10, fontSize:13, color:G.red }}>
             ⚠ {saveErr}
           </div>
         )}
-        <div style={{ display:"flex", gap:10, marginTop:20, justifyContent:"flex-end" }}>
-          <Btn variant="ghost" onClick={onClose} disabled={saving}>Cancel</Btn>
-          <Btn onClick={handleSubmit} disabled={saving}>
-            {saving ? "Saving..." : job ? "Save Changes" : "Add Job"}
-          </Btn>
+        <div style={{ display:"flex", gap:10, padding:"12px 24px 24px", justifyContent:"space-between", alignItems:"center", borderTop:`1px solid ${G.border}` }}>
+          <div style={{ display:"flex", gap:8 }}>
+            {MODAL_TABS.map((t,i) => (
+              <button key={t.key} onClick={()=>setActiveTab(t.key)}
+                style={{ width:8, height:8, borderRadius:"50%", border:"none", cursor:"pointer", background:activeTab===t.key?G.light:G.border, padding:0, transition:"background .12s" }} />
+            ))}
+          </div>
+          <div style={{ display:"flex", gap:10 }}>
+            <Btn variant="ghost" onClick={onClose} disabled={saving}>Cancel</Btn>
+            <Btn onClick={handleSubmit} disabled={saving}>
+              {saving ? "Saving..." : job ? "Save Changes" : "Add Job"}
+            </Btn>
+          </div>
         </div>
       </div>
     </div>
@@ -754,124 +839,162 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange }) {
 }
 
 // ─── Jobs List ────────────────────────────────────────────────────────────
+const JOB_GROUPS = [
+  { key:"quoted",  label:"Quoted",  statuses:["quote"],               icon:"📋" },
+  { key:"active",  label:"Active",  statuses:["open","in_progress"],  icon:"🔧" },
+  { key:"won",     label:"Won",     statuses:["won"],                  icon:"🏆" },
+  { key:"lost",    label:"Lost",    statuses:["lost"],                 icon:"📁" },
+];
+
 function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete, onStatusChange }) {
-  const [search,       setSearch]       = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [selected,     setSelected]     = useState(new Set());
+  const [search,    setSearch]    = useState("");
+  const [collapsed, setCollapsed] = useState({ won:true, lost:true });
+  const [exporting, setExporting] = useState(false);
+  const [selected,  setSelected]  = useState(new Set());
 
   const filtered = useMemo(() => {
-    const base = [...jobs].sort((a,b)=>b.id-a.id); // newest first
-    return base.filter(j => {
-      const q = search.toLowerCase();
-      const matchQ = !q
-        || (j.customer||"").toLowerCase().includes(q)
-        || (j.billTo||"").toLowerCase().includes(q)
-        || (j.jobName||"").toLowerCase().includes(q)
-        || (j.address||"").toLowerCase().includes(q)
-        || (j.projectManager||"").toLowerCase().includes(q)
-        || (j.salesRep1||"").toLowerCase().includes(q)
-        || (j.quoteHoldNum||"").toLowerCase().includes(q)
-        || (j.notes||"").toLowerCase().includes(q);
-      const matchS = filterStatus==="all" || j.status===filterStatus;
-      return matchQ && matchS;
-    });
-  }, [jobs, search, filterStatus]);
+    const base = [...jobs].sort((a,b)=>b.id-a.id);
+    if (!search.trim()) return base;
+    const q = search.toLowerCase();
+    return base.filter(j =>
+      (j.customer||"").toLowerCase().includes(q)
+      || (j.billTo||"").toLowerCase().includes(q)
+      || (j.jobName||"").toLowerCase().includes(q)
+      || (j.address||"").toLowerCase().includes(q)
+      || (j.projectManager||"").toLowerCase().includes(q)
+      || (j.salesRep1||"").toLowerCase().includes(q)
+      || (j.quoteHoldNum||"").toLowerCase().includes(q)
+      || (j.notes||"").toLowerCase().includes(q)
+    );
+  }, [jobs, search]);
 
-  const allIds      = filtered.map(j=>j.id);
-  const allChecked  = allIds.length>0 && allIds.every(id=>selected.has(id));
-  const someChecked = allIds.some(id=>selected.has(id));
+  const allIds           = filtered.map(j=>j.id);
+  const allChecked       = allIds.length>0 && allIds.every(id=>selected.has(id));
+  const someChecked      = allIds.some(id=>selected.has(id));
   const selectedFiltered = allIds.filter(id=>selected.has(id));
+  const toggleAll        = () => setSelected(allChecked ? new Set() : new Set(allIds));
+  const toggle           = id => setSelected(prev=>{ const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
+  const toggleGroup      = key => setCollapsed(c=>({...c,[key]:!c[key]}));
 
-  const toggleAll = () => setSelected(allChecked ? new Set() : new Set(allIds));
-  const toggle    = id => setSelected(prev=>{ const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
+  const JobRow = ({ j, isLast }) => (
+    <div style={{
+      display:"flex", alignItems:"flex-start", gap:12, padding:"12px 18px",
+      borderBottom:isLast?"none":`1px solid ${G.border}`,
+      background:selected.has(j.id)?G.mint:"white", transition:"background .1s",
+    }}>
+      <input type="checkbox" checked={selected.has(j.id)} onChange={()=>toggle(j.id)}
+        style={{ width:16, height:16, cursor:"pointer", marginTop:4, accentColor:G.light }} />
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          <span style={{ fontWeight:700, fontSize:15, color:G.text }}>{j.billTo||j.customer}</span>
+          {j.scheduleStatus && <span style={{ fontSize:11, background:G.mint, color:G.dark, borderRadius:6, padding:"1px 7px", fontWeight:600 }}>{j.scheduleStatus}</span>}
+        </div>
+        {j.jobName && <div style={{ fontSize:13, color:G.text, marginTop:2, fontWeight:500 }}>📍 {j.jobName}</div>}
+        <div style={{ fontSize:12, color:G.muted, marginTop:3 }}>
+          {[j.quoteHoldNum&&`#${j.quoteHoldNum}`, j.installType, j.projectType, j.endUseSegment].filter(Boolean).join(" · ")}
+        </div>
+        <div style={{ fontSize:12, color:G.muted, marginTop:2 }}>
+          {[j.projectManager&&`PM: ${j.projectManager}`, j.salesRep1&&`Rep: ${j.salesRep1}`, j.address].filter(Boolean).join(" · ")}
+        </div>
+      </div>
+      <div style={{ textAlign:"right", flexShrink:0 }}>
+        <div style={{ fontWeight:800, fontSize:15, color:G.light }}>{fmt$(j.amount)}</div>
+        <div style={{ fontSize:11, color:G.muted, marginBottom:6 }}>{fmtDate(j.start)}</div>
+        <div style={{ display:"flex", gap:5, justifyContent:"flex-end", flexWrap:"wrap" }}>
+          {j.status==="quote" && onStatusChange && (
+            <button onClick={()=>onStatusChange(j.id,"won")}
+              style={{ padding:"4px 10px", borderRadius:8, border:`1.5px solid ${G.gold}`, background:"#fffbeb", color:G.gold, fontWeight:700, fontSize:11, cursor:"pointer" }}>
+              🏆 Won
+            </button>
+          )}
+          {(j.status==="open"||j.status==="in_progress") && onStatusChange && (
+            <button onClick={()=>onStatusChange(j.id,"won")}
+              style={{ padding:"4px 10px", borderRadius:8, border:`1.5px solid ${G.light}`, background:G.mint, color:G.dark, fontWeight:700, fontSize:11, cursor:"pointer" }}>
+              ✓ Done
+            </button>
+          )}
+          {(j.status==="quote"||j.status==="open"||j.status==="in_progress") && onStatusChange && (
+            <button onClick={()=>onStatusChange(j.id,"lost")}
+              style={{ padding:"4px 8px", borderRadius:8, border:`1.5px solid ${G.border}`, background:"#f9fafb", color:G.muted, fontWeight:700, fontSize:11, cursor:"pointer" }}>
+              ✗
+            </button>
+          )}
+          <Btn variant="ghost" small onClick={()=>onEdit(j)}>Edit</Btn>
+          <Btn variant="danger" small onClick={()=>onDelete(j.id)}>🗑</Btn>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
         <h1 style={{ margin:0, fontSize:26, fontWeight:800, color:G.text }}>📋 Jobs</h1>
-        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+        <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
           {selectedFiltered.length>0 && (
             <Btn variant="danger" small onClick={()=>{ onBulkDelete(selectedFiltered); setSelected(new Set()); }}>
-              🗑 Delete {selectedFiltered.length} Selected
+              🗑 {selectedFiltered.length} Selected
             </Btn>
           )}
+          <button onClick={async()=>{ setExporting(true); try{ await exportJobsToExcel(filtered); }finally{ setExporting(false); } }}
+            disabled={exporting}
+            style={{ padding:"7px 14px", borderRadius:10, border:`1.5px solid ${G.border}`, background:G.card, color:G.dark, fontSize:13, fontWeight:600, cursor:"pointer" }}>
+            {exporting?"Exporting…":"⬇ Export"}
+          </button>
           <Btn onClick={onAdd} variant="gold">+ Add Job</Btn>
         </div>
       </div>
 
-      <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search jobs, customer, PM, rep..."
-          style={{ flex:1, minWidth:180, padding:"9px 14px", borderRadius:10, border:`1.5px solid ${G.border}`, fontSize:14, background:G.card, color:G.text, outline:"none" }} />
-        <select value={filterStatus} onChange={e=>{ setFilterStatus(e.target.value); setSelected(new Set()); }}
-          style={{ padding:"9px 14px", borderRadius:10, border:`1.5px solid ${G.border}`, fontSize:14, background:G.card, color:G.text, outline:"none" }}>
-          <option value="all">All Statuses</option>
-          {Object.entries(STATUSES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-        </select>
-      </div>
+      {/* Search */}
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search jobs, customer, PM, rep, quote #..."
+        style={{ width:"100%", boxSizing:"border-box", padding:"10px 14px", borderRadius:10, border:`1.5px solid ${G.border}`, fontSize:14, background:G.card, color:G.text, outline:"none", marginBottom:18 }} />
 
-      <div style={{ background:G.card, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 12px ${G.border}` }}>
-        {filtered.length>0 && (
-          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 18px", background:G.mint, borderBottom:`1px solid ${G.border}` }}>
-            <input type="checkbox" checked={allChecked} onChange={toggleAll}
-              ref={el=>{ if(el) el.indeterminate=someChecked&&!allChecked; }}
-              style={{ width:16, height:16, cursor:"pointer", accentColor:G.light }} />
-            <span style={{ fontSize:12, fontWeight:600, color:G.dark }}>
-              {someChecked ? `${selectedFiltered.length} selected` : `${filtered.length} job${filtered.length!==1?"s":""}`}
-            </span>
-          </div>
-        )}
-        {filtered.length===0 && <div style={{ padding:36, textAlign:"center", color:G.muted }}>No jobs found</div>}
-        {filtered.map((j,idx)=>(
-          <div key={j.id} style={{
-            display:"flex", alignItems:"flex-start", gap:12, padding:"12px 18px",
-            borderBottom:idx<filtered.length-1?`1px solid ${G.border}`:"none",
-            background:selected.has(j.id)?G.mint:"white", transition:"background .1s",
-          }}>
-            <input type="checkbox" checked={selected.has(j.id)} onChange={()=>toggle(j.id)}
-              style={{ width:16, height:16, cursor:"pointer", marginTop:4, accentColor:G.light }} />
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-                <span style={{ fontWeight:700, fontSize:15, color:G.text }}>{j.billTo||j.customer}</span>
-                <Badge status={j.status} />
-                {j.scheduleStatus && <span style={{ fontSize:11, background:G.mint, color:G.dark, borderRadius:6, padding:"1px 7px", fontWeight:600 }}>{j.scheduleStatus}</span>}
+      {/* Bulk select bar */}
+      {someChecked && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 14px", background:G.mint, borderRadius:10, marginBottom:12 }}>
+          <input type="checkbox" checked={allChecked} onChange={toggleAll}
+            ref={el=>{ if(el) el.indeterminate=someChecked&&!allChecked; }}
+            style={{ width:16, height:16, cursor:"pointer", accentColor:G.light }} />
+          <span style={{ fontSize:13, fontWeight:600, color:G.dark }}>{selectedFiltered.length} selected</span>
+        </div>
+      )}
+
+      {/* Grouped sections */}
+      {filtered.length===0 && (
+        <div style={{ textAlign:"center", padding:48, color:G.muted, background:G.card, borderRadius:18 }}>No jobs found</div>
+      )}
+      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+        {JOB_GROUPS.map(grp => {
+          const grpJobs = filtered.filter(j => grp.statuses.includes(j.status));
+          if (grpJobs.length===0) return null;
+          const total   = grpJobs.reduce((s,j)=>s+j.amount,0);
+          const isOpen  = !collapsed[grp.key];
+          const sv      = STATUSES[grp.statuses[0]];
+          return (
+            <div key={grp.key} style={{ background:G.card, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 12px ${G.border}` }}>
+              {/* Group header */}
+              <div onClick={()=>toggleGroup(grp.key)} style={{
+                display:"flex", alignItems:"center", gap:10, padding:"12px 18px",
+                background:`linear-gradient(135deg,${sv.bg} 0%,#fff 100%)`,
+                cursor:"pointer", userSelect:"none",
+                borderBottom:isOpen?`1px solid ${G.border}`:"none",
+              }}>
+                <span style={{ fontSize:16 }}>{grp.icon}</span>
+                <span style={{ fontWeight:800, fontSize:15, color:sv.text, flex:1 }}>{grp.label}</span>
+                <span style={{ fontSize:12, fontWeight:700, background:sv.bg, color:sv.text, border:`1px solid ${sv.dot}`, borderRadius:20, padding:"2px 10px" }}>
+                  {grpJobs.length} job{grpJobs.length!==1?"s":""}
+                </span>
+                <span style={{ fontSize:13, fontWeight:800, color:G.light, minWidth:80, textAlign:"right" }}>{fmt$(total)}</span>
+                <span style={{ fontSize:12, color:G.muted, marginLeft:4 }}>{isOpen?"▲":"▼"}</span>
               </div>
-              {j.jobName && <div style={{ fontSize:13, color:G.text, marginTop:2, fontWeight:500 }}>📍 {j.jobName}</div>}
-              <div style={{ fontSize:12, color:G.muted, marginTop:3 }}>
-                {[j.quoteHoldNum&&`#${j.quoteHoldNum}`, j.installType, j.projectType, j.endUseSegment].filter(Boolean).join(" · ")}
-              </div>
-              <div style={{ fontSize:12, color:G.muted, marginTop:2 }}>
-                {[j.projectManager&&`PM: ${j.projectManager}`, j.salesRep1&&`Rep: ${j.salesRep1}`, j.address].filter(Boolean).join(" · ")}
-              </div>
-              {j.notes&&<div style={{ fontSize:11, color:G.muted, marginTop:2, fontStyle:"italic" }}>{j.notes.slice(0,80)}{j.notes.length>80?"…":""}</div>}
+              {/* Rows */}
+              {isOpen && grpJobs.map((j,idx)=>(
+                <JobRow key={j.id} j={j} isLast={idx===grpJobs.length-1} />
+              ))}
             </div>
-            <div style={{ textAlign:"right", flexShrink:0 }}>
-              <div style={{ fontWeight:800, fontSize:16, color:G.light }}>{fmt$(j.amount)}</div>
-              <div style={{ fontSize:11, color:G.muted }}>{fmtDate(j.start)} → {fmtDate(j.close)}</div>
-              <div style={{ display:"flex", gap:6, marginTop:6, justifyContent:"flex-end", flexWrap:"wrap" }}>
-                {j.status==="quote" && onStatusChange && (
-                  <button onClick={()=>onStatusChange(j.id,"won")}
-                    style={{ padding:"4px 10px", borderRadius:8, border:`1.5px solid ${G.gold}`, background:"#fffbeb", color:G.gold, fontWeight:700, fontSize:11, cursor:"pointer" }}>
-                    🏆 Won
-                  </button>
-                )}
-                {(j.status==="open"||j.status==="in_progress") && onStatusChange && (
-                  <button onClick={()=>onStatusChange(j.id,"won")}
-                    style={{ padding:"4px 10px", borderRadius:8, border:`1.5px solid ${G.light}`, background:G.mint, color:G.dark, fontWeight:700, fontSize:11, cursor:"pointer" }}>
-                    ✓ Complete
-                  </button>
-                )}
-                {(j.status==="quote"||j.status==="open"||j.status==="in_progress") && onStatusChange && (
-                  <button onClick={()=>onStatusChange(j.id,"lost")}
-                    style={{ padding:"4px 8px", borderRadius:8, border:`1.5px solid ${G.border}`, background:"#f9fafb", color:G.muted, fontWeight:700, fontSize:11, cursor:"pointer" }}>
-                    Lost
-                  </button>
-                )}
-                <Btn variant="ghost" small onClick={()=>onEdit(j)}>Edit</Btn>
-                <Btn variant="danger" small onClick={()=>onDelete(j.id)}>🗑</Btn>
-              </div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1452,42 +1575,68 @@ export default function CountertopCRM() {
     await fetchJobs(); showToast(`${ids.length} job${ids.length!==1?"s":""} deleted`);
   };
 
+  const isMobile = useIsMobile();
+
   const TABS = [
-    ["dashboard","⛳ Dashboard"],
-    ["jobs","📋 Jobs"],
-    ["customers","👥 Customers"],
-    ["import","⬇ Import"],
-    ["map","🗺 Map"],
+    ["dashboard","⛳","Dashboard"],
+    ["jobs","📋","Jobs"],
+    ["customers","👥","Customers"],
+    ["import","⬇","Import"],
+    ["map","🗺","Map"],
   ];
+
+  // Count badges for tabs
+  const tabCounts = useMemo(() => ({
+    jobs:      jobs.filter(j=>j.status!=="won"&&j.status!=="lost").length,
+    customers: [...new Set(jobs.map(j=>j.billTo||j.customer))].length,
+  }), [jobs]);
 
   return (
     <div style={{ minHeight:"100vh", background:G.bg, fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif" }}>
       {/* Topbar */}
-      <div style={{ background:`linear-gradient(135deg,${G.darkest} 0%,${G.dark} 60%,${G.mid} 100%)`, padding:"0 24px", boxShadow:"0 2px 16px rgba(0,0,0,.35)", position:"sticky", top:0, zIndex:200 }}>
+      <div style={{ background:`linear-gradient(135deg,${G.darkest} 0%,${G.dark} 60%,${G.mid} 100%)`, padding:"0 16px", boxShadow:"0 2px 16px rgba(0,0,0,.35)", position:"sticky", top:0, zIndex:200 }}>
         <div style={{ maxWidth:1280, margin:"0 auto", display:"flex", alignItems:"center" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0", marginRight:24, flexShrink:0 }}>
-            <div style={{ width:36, height:36, borderRadius:10, background:`linear-gradient(135deg,${G.goldLt},${G.gold})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, boxShadow:`0 2px 8px ${G.gold}66` }}>⛳</div>
-            <div>
-              <div style={{ color:"#fff", fontWeight:800, fontSize:15, letterSpacing:-.3 }}>FairwayStone</div>
-              <div style={{ color:G.mint, fontSize:10, opacity:.8, letterSpacing:.2 }}>COUNTERTOP CRM</div>
-            </div>
+          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 0", marginRight:16, flexShrink:0 }}>
+            <div style={{ width:34, height:34, borderRadius:10, background:`linear-gradient(135deg,${G.goldLt},${G.gold})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:`0 2px 8px ${G.gold}66` }}>⛳</div>
+            {!isMobile && (
+              <div>
+                <div style={{ color:"#fff", fontWeight:800, fontSize:15, letterSpacing:-.3 }}>FairwayStone</div>
+                <div style={{ color:G.mint, fontSize:10, opacity:.8, letterSpacing:.2 }}>COUNTERTOP CRM</div>
+              </div>
+            )}
           </div>
-          <nav style={{ display:"flex", gap:2, overflow:"auto" }}>
-            {TABS.map(([id,label])=>(
-              <button key={id} onClick={()=>setTab(id)} style={{
-                background:tab===id?`linear-gradient(135deg,${G.light}cc,${G.mid}cc)`:"transparent",
-                border:"none", color:tab===id?"#fff":`${G.mint}bb`,
-                padding:"18px 16px", cursor:"pointer", fontSize:13, fontWeight:tab===id?700:500,
-                borderBottom:tab===id?`2.5px solid ${G.goldLt}`:"2.5px solid transparent",
-                transition:"all .15s", whiteSpace:"nowrap",
-              }}>{label}</button>
-            ))}
-          </nav>
+          {/* Desktop nav — hidden on mobile */}
+          {!isMobile && (
+            <nav style={{ display:"flex", gap:2, overflow:"auto" }}>
+              {TABS.map(([id,icon,label])=>(
+                <button key={id} onClick={()=>setTab(id)} style={{
+                  background:tab===id?`linear-gradient(135deg,${G.light}cc,${G.mid}cc)`:"transparent",
+                  border:"none", color:tab===id?"#fff":`${G.mint}bb`,
+                  padding:"16px 14px", cursor:"pointer", fontSize:13, fontWeight:tab===id?700:500,
+                  borderBottom:tab===id?`2.5px solid ${G.goldLt}`:"2.5px solid transparent",
+                  transition:"all .15s", whiteSpace:"nowrap", position:"relative",
+                }}>
+                  {icon} {label}
+                  {tabCounts[id]>0 && (
+                    <span style={{ marginLeft:5, fontSize:10, fontWeight:800, background:G.gold, color:"#fff", borderRadius:99, padding:"1px 6px", verticalAlign:"middle" }}>
+                      {tabCounts[id]}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </nav>
+          )}
+          {/* Mobile: show current tab name */}
+          {isMobile && (
+            <span style={{ color:"#fff", fontWeight:700, fontSize:15, flex:1, textAlign:"center" }}>
+              {TABS.find(t=>t[0]===tab)?.[2]||""}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Content */}
-      <div style={{ maxWidth:1280, margin:"0 auto", padding:"28px 20px" }}>
+      <div style={{ maxWidth:1280, margin:"0 auto", padding:isMobile?"16px 12px 90px":"28px 20px" }}>
         {dbError && (
           <div style={{ background:"#fef2f2", border:"1.5px solid #fecaca", borderRadius:14, padding:"14px 20px", marginBottom:20, display:"flex", alignItems:"flex-start", gap:12 }}>
             <span style={{ fontSize:20 }}>⚠️</span>
@@ -1523,10 +1672,36 @@ export default function CountertopCRM() {
         />
       )}
 
+      {/* Mobile bottom nav */}
+      {isMobile && (
+        <div style={{ position:"fixed", bottom:0, left:0, right:0, zIndex:300,
+          background:`linear-gradient(135deg,${G.darkest} 0%,${G.dark} 100%)`,
+          display:"flex", borderTop:`1px solid rgba(255,255,255,.1)`,
+          paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
+          {TABS.map(([id,icon,label])=>(
+            <button key={id} onClick={()=>setTab(id)} style={{
+              flex:1, padding:"10px 4px 8px", border:"none", background:"transparent",
+              display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+              cursor:"pointer", position:"relative",
+            }}>
+              <span style={{ fontSize:20, lineHeight:1 }}>{icon}</span>
+              <span style={{ fontSize:9, fontWeight:tab===id?800:500, color:tab===id?G.goldLt:`${G.mint}99`, letterSpacing:.2 }}>{label}</span>
+              {tab===id && <span style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", width:28, height:2, background:G.goldLt, borderRadius:99 }} />}
+              {tabCounts[id]>0 && tab!==id && (
+                <span style={{ position:"absolute", top:6, right:"50%", marginRight:-18, fontSize:8, fontWeight:800, background:G.gold, color:"#fff", borderRadius:99, padding:"1px 4px", lineHeight:1.4 }}>
+                  {tabCounts[id]}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
       {toast && (
-        <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)",
+        <div style={{ position:"fixed", bottom:isMobile?72:24, left:"50%", transform:"translateX(-50%)",
           background:toast.type==="error"?G.red:G.light, color:"#fff", padding:"12px 24px",
-          borderRadius:12, fontWeight:600, fontSize:14, boxShadow:"0 4px 20px rgba(0,0,0,.3)", zIndex:9999 }}>
+          borderRadius:12, fontWeight:600, fontSize:14, boxShadow:"0 4px 20px rgba(0,0,0,.3)", zIndex:9999,
+          whiteSpace:"nowrap" }}>
           {toast.msg}
         </div>
       )}
