@@ -102,7 +102,6 @@ function rowToJob(r) {
     lat:            r.lat  ? parseFloat(r.lat)  : null,
     lng:            r.lng  ? parseFloat(r.lng)  : null,
     createdAt:      r.created_at||today(),
-    // New fields
     customerPo:     r.customer_po||"",
     quoteHoldNum:   r.quote_hold_num||"",
     installType:    r.install_type||"",
@@ -110,6 +109,7 @@ function rowToJob(r) {
     projectType:    r.project_type||"",
     scheduleStatus: r.schedule_status||"",
     billTo:         r.bill_to||"",
+    jobName:        r.job_name||"",       // the actual project/site name
     salesRep1:      r.sales_rep1||"",
     salesRep2:      r.sales_rep2||"",
     projectManager: r.project_manager||"",
@@ -138,6 +138,7 @@ function jobToRow(j) {
     project_type:    j.projectType||null,
     schedule_status: j.scheduleStatus||null,
     bill_to:         j.billTo||null,
+    job_name:        j.jobName||null,
     sales_rep1:      j.salesRep1||null,
     sales_rep2:      j.salesRep2||null,
     project_manager: j.projectManager||null,
@@ -233,12 +234,16 @@ function parseImportSheet(worksheet, XLSX) {
     else if (pt.includes("quartz")) material = "Quartz";
     else if (pt.includes("marble")) material = "Marble";
 
-    const address = [jobName, location].filter(Boolean).join(" — ");
+    // jobName = the site/project description (e.g. "Wolslager Residence 210 E Tarrant")
+    // address = physical location/area (e.g. "Bellezza")
+    // billTo  = the billing company (e.g. "Sterling Creek Custom Homes")
+    const address = location; // location column is the city/area
 
     const job = {
       id:             numId,
       customer:       billTo || "Unknown",
       billTo,
+      jobName,        // separate — the project name/site address from Job Name column
       jobType:        "",
       material,
       status,
@@ -382,7 +387,7 @@ function Input({ label, value, onChange, type="text", required, placeholder }) {
 
 // ─── Job Form Modal ────────────────────────────────────────────────────────
 const BLANK = {
-  customer:"", billTo:"", customerPo:"", quoteHoldNum:"",
+  customer:"", billTo:"", jobName:"", customerPo:"", quoteHoldNum:"",
   jobType:"", material:"", installType:"", endUseSegment:"", projectType:"", scheduleStatus:"",
   status:"quote", amount:"", sqft:"",
   salesRep1:"", salesRep2:"", projectManager:"",
@@ -393,6 +398,7 @@ function JobModal({ job, onSave, onClose }) {
   const [f,       setF]       = useState(job ? {
     customer:       job.customer,
     billTo:         job.billTo||"",
+    jobName:        job.jobName||"",
     customerPo:     job.customerPo||"",
     quoteHoldNum:   job.quoteHoldNum||"",
     jobType:        job.jobType||"",
@@ -446,8 +452,11 @@ function JobModal({ job, onSave, onClose }) {
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
 
           <SectionHead title="Customer & Reference" />
-          <ComboInput label="Bill To Customer" value={f.billTo}       onChange={v=>{ set("billTo")(v); if(!f.customer) set("customer")(v); }} optKey="billTo" placeholder="Company or customer name" />
-          <Input      label="Customer Name"    value={f.customer}    onChange={set("customer")} placeholder="Same as Bill To, or individual" />
+          <ComboInput label="Bill To Customer" value={f.billTo}        onChange={v=>{ set("billTo")(v); if(!f.customer) set("customer")(v); }} optKey="billTo" placeholder="Billing company (e.g. Sterling Creek Custom Homes)" />
+          <Input      label="Customer Name"    value={f.customer}     onChange={set("customer")} placeholder="Individual name if different from Bill To" />
+          <div style={{ gridColumn:"1/-1" }}>
+            <Input    label="Job Name"         value={f.jobName||""}  onChange={set("jobName")} placeholder="Project / site name (e.g. Wolslager Residence 210 E Tarrant)" />
+          </div>
           <Input      label="Customer P.O. #"  value={f.customerPo}  onChange={set("customerPo")} placeholder="e.g. 18013649-000" />
           <Input      label="Quote / Hold #"   value={f.quoteHoldNum} onChange={set("quoteHoldNum")} placeholder="e.g. 9219-4" />
 
@@ -643,6 +652,7 @@ function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete }) {
                 <Badge status={j.status} />
                 {j.scheduleStatus && <span style={{ fontSize:11, background:G.mint, color:G.dark, borderRadius:6, padding:"1px 7px", fontWeight:600 }}>{j.scheduleStatus}</span>}
               </div>
+              {j.jobName && <div style={{ fontSize:13, color:G.text, marginTop:2, fontWeight:500 }}>📍 {j.jobName}</div>}
               <div style={{ fontSize:12, color:G.muted, marginTop:3 }}>
                 {[j.quoteHoldNum&&`#${j.quoteHoldNum}`, j.installType, j.projectType, j.endUseSegment].filter(Boolean).join(" · ")}
               </div>
@@ -701,6 +711,18 @@ function CustomersView({ jobs }) {
   );
 }
 
+// ─── Import History helpers ────────────────────────────────────────────────
+function loadImportHistory() {
+  try { const r = localStorage.getItem("crm_import_history"); return r ? JSON.parse(r) : []; } catch { return []; }
+}
+function saveImportHistory(entry) {
+  try {
+    const hist = loadImportHistory();
+    hist.unshift(entry); // newest first
+    localStorage.setItem("crm_import_history", JSON.stringify(hist.slice(0, 50)));
+  } catch {}
+}
+
 // ─── Import Tab ───────────────────────────────────────────────────────────
 function ImportView({ onImportDone }) {
   const [dragging, setDragging] = useState(false);
@@ -710,7 +732,10 @@ function ImportView({ onImportDone }) {
   const [importing,setImporting]= useState(false);
   const [parsing,  setParsing]  = useState(false);
   const [done,     setDone]     = useState(null);
+  const [history,  setHistory]  = useState([]);
   const inputRef = useRef(null);
+
+  useEffect(() => { setHistory(loadImportHistory()); }, []);
 
   const handleFile = useCallback(async f => {
     if (!f) return;
@@ -749,6 +774,9 @@ function ImportView({ onImportDone }) {
         if (error) throw error;
       }
 
+      const entry = { filename: file?.name||"unknown", date: new Date().toISOString(), count: unique.length };
+      saveImportHistory(entry);
+      setHistory(loadImportHistory());
       setDone({ count:unique.length });
       onImportDone();
     } catch(e) {
@@ -757,16 +785,47 @@ function ImportView({ onImportDone }) {
   };
 
   const reset = () => { setFile(null); setParsed([]); setErrors([]); setDone(null); };
+  const clearHistory = () => { try { localStorage.removeItem("crm_import_history"); } catch {} setHistory([]); };
+
+  const fmtHistDate = iso => {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-US",{ month:"short", day:"numeric", year:"numeric" }) + " at " + d.toLocaleTimeString("en-US",{ hour:"numeric", minute:"2-digit" });
+  };
 
   return (
     <div>
       <h1 style={{ margin:"0 0 6px", fontSize:26, fontWeight:800, color:G.text }}>⬇ Import Jobs</h1>
       <p style={{ margin:"0 0 24px", color:G.muted, fontSize:14 }}>Drop your monthly Excel spreadsheet to sync all jobs automatically.</p>
 
+      {/* ── Import History ── */}
+      {history.length > 0 && !file && !done && (
+        <div style={{ background:G.card, borderRadius:16, padding:18, marginBottom:24, boxShadow:`0 2px 12px ${G.border}` }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+            <span style={{ fontWeight:700, fontSize:15, color:G.text }}>📂 Import History</span>
+            <button onClick={clearHistory} style={{ background:"none", border:"none", fontSize:12, color:G.muted, cursor:"pointer", padding:"2px 8px" }}>Clear history</button>
+          </div>
+          {history.map((h,i)=>(
+            <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"9px 0", borderBottom: i<history.length-1?`1px solid ${G.border}`:"none" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <span style={{ fontSize:18 }}>📄</span>
+                <div>
+                  <div style={{ fontWeight:600, fontSize:13, color:G.text }}>{h.filename}</div>
+                  <div style={{ fontSize:11, color:G.muted, marginTop:1 }}>{fmtHistDate(h.date)}</div>
+                </div>
+              </div>
+              <span style={{ background:G.mint, color:G.dark, borderRadius:8, padding:"3px 10px", fontSize:12, fontWeight:700 }}>
+                {h.count} jobs
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Drop Zone ── */}
       {!file && (
         <div onDragOver={e=>{e.preventDefault();setDragging(true);}} onDragLeave={()=>setDragging(false)}
           onDrop={onDrop} onClick={()=>inputRef.current?.click()}
-          style={{ border:`2.5px dashed ${dragging?G.light:G.border}`, borderRadius:20, padding:"52px 32px",
+          style={{ border:`2.5px dashed ${dragging?G.light:G.border}`, borderRadius:20, padding:"48px 32px",
             textAlign:"center", cursor:"pointer", background:dragging?G.mint:G.bg, transition:"all .2s",
             boxShadow:dragging?`0 0 0 4px ${G.light}22`:"none" }}>
           <div style={{ fontSize:52, marginBottom:14 }}>📥</div>
@@ -798,10 +857,11 @@ function ImportView({ onImportDone }) {
         </div>
       )}
 
+      {/* ── Preview Table ── */}
       {parsed.length>0 && !done && (
         <div>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-            <span style={{ fontWeight:700, fontSize:16, color:G.text }}>{parsed.length} jobs found in {file?.name}</span>
+            <span style={{ fontWeight:700, fontSize:16, color:G.text }}>{parsed.length} jobs found in <em>{file?.name}</em></span>
             <div style={{ display:"flex", gap:8 }}>
               <Btn variant="ghost" small onClick={reset}>Clear</Btn>
               <Btn variant="gold" onClick={doImport} disabled={importing}>
@@ -814,25 +874,26 @@ function ImportView({ onImportDone }) {
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                 <thead>
                   <tr style={{ background:G.mint }}>
-                    {["Bill To","Quote #","Type","Segment","Project Type","PM","Amount","Status"].map(h=>(
-                      <th key={h} style={{ padding:"9px 12px", textAlign:"left", fontWeight:700, color:G.dark, textTransform:"uppercase", fontSize:11, letterSpacing:.3 }}>{h}</th>
+                    {["Bill To Customer","Job Name","Quote #","Type","Segment","Project Type","PM","Amount","Status"].map(h=>(
+                      <th key={h} style={{ padding:"9px 12px", textAlign:"left", fontWeight:700, color:G.dark, textTransform:"uppercase", fontSize:11, letterSpacing:.3, whiteSpace:"nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {parsed.slice(0,60).map((j,i)=>(
                     <tr key={j.id} style={{ borderTop:`1px solid ${G.border}`, background:i%2===0?"transparent":G.bg }}>
-                      <td style={{ padding:"8px 12px", fontWeight:600, color:G.text }}>{j.billTo||j.customer}</td>
-                      <td style={{ padding:"8px 12px", color:G.muted }}>{j.quoteHoldNum||"—"}</td>
+                      <td style={{ padding:"8px 12px", fontWeight:600, color:G.text, whiteSpace:"nowrap" }}>{j.billTo||j.customer}</td>
+                      <td style={{ padding:"8px 12px", color:G.muted, maxWidth:200, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{j.jobName||"—"}</td>
+                      <td style={{ padding:"8px 12px", color:G.muted, whiteSpace:"nowrap" }}>{j.quoteHoldNum||"—"}</td>
                       <td style={{ padding:"8px 12px", color:G.muted }}>{j.installType||"—"}</td>
                       <td style={{ padding:"8px 12px", color:G.muted }}>{j.endUseSegment||"—"}</td>
-                      <td style={{ padding:"8px 12px", color:G.muted }}>{j.projectType||"—"}</td>
-                      <td style={{ padding:"8px 12px", color:G.muted }}>{j.projectManager||"—"}</td>
-                      <td style={{ padding:"8px 12px", fontWeight:700, color:G.light }}>{fmt$(j.amount)}</td>
+                      <td style={{ padding:"8px 12px", color:G.muted, whiteSpace:"nowrap" }}>{j.projectType||"—"}</td>
+                      <td style={{ padding:"8px 12px", color:G.muted, whiteSpace:"nowrap" }}>{j.projectManager||"—"}</td>
+                      <td style={{ padding:"8px 12px", fontWeight:700, color:G.light, whiteSpace:"nowrap" }}>{fmt$(j.amount)}</td>
                       <td style={{ padding:"8px 12px" }}><Badge status={j.status} /></td>
                     </tr>
                   ))}
-                  {parsed.length>60&&<tr><td colSpan={8} style={{ padding:"10px 12px", textAlign:"center", color:G.muted, fontSize:12 }}>...and {parsed.length-60} more</td></tr>}
+                  {parsed.length>60&&<tr><td colSpan={9} style={{ padding:"10px 12px", textAlign:"center", color:G.muted, fontSize:12 }}>...and {parsed.length-60} more</td></tr>}
                 </tbody>
               </table>
             </div>
