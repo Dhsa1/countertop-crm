@@ -550,9 +550,10 @@ function JobModal({ job, onSave, onClose }) {
   // Backdrop click to close
   const handleBackdrop = e => { if (e.target === e.currentTarget) onClose(); };
 
+  const isMob = useIsMobile();
   return (
-    <div onClick={handleBackdrop} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:1000, padding:"0" }}>
-      <div style={{ background:G.card, borderRadius:"20px 20px 0 0", width:"100%", maxWidth:620, maxHeight:"94vh", display:"flex", flexDirection:"column", boxShadow:"0 -8px 40px rgba(0,0,0,.35)" }}>
+    <div onClick={handleBackdrop} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", display:"flex", alignItems:isMob?"flex-end":"center", justifyContent:"center", zIndex:1000, padding:isMob?"0":"16px" }}>
+      <div style={{ background:G.card, borderRadius:isMob?"20px 20px 0 0":"20px", width:"100%", maxWidth:620, maxHeight:"94vh", display:"flex", flexDirection:"column", boxShadow:isMob?"0 -8px 40px rgba(0,0,0,.35)":"0 24px 64px rgba(0,0,0,.35)" }}>
 
         {/* Header */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"20px 24px 0" }}>
