@@ -517,7 +517,7 @@ function JobModal({ job, onSave, onClose }) {
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────
-function Dashboard({ jobs, onAdd }) {
+function Dashboard({ jobs, onAdd, onEdit, onStatusChange }) {
   const now = new Date();
   const [year,  setYear]  = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -623,37 +623,38 @@ function Dashboard({ jobs, onAdd }) {
       {/* ── Calendar ── */}
       <div style={{ background:G.card, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 12px ${G.border}`, marginBottom:24 }}>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", background:G.mint }}>
-          {WEEKDAYS.map(d=><div key={d} style={{ padding:"10px 0", textAlign:"center", fontSize:12, fontWeight:700, color:G.dark }}>{d}</div>)}
+          {WEEKDAYS.map(d=><div key={d} style={{ padding:"8px 0", textAlign:"center", fontSize:11, fontWeight:700, color:G.dark }}>{d.slice(0,1)}</div>)}
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)" }}>
           {cells.map((d,i)=>{
-            if (!d) return <div key={`e${i}`} style={{ minHeight:72, background:"#fafafa", borderRight:`1px solid ${G.border}`, borderBottom:`1px solid ${G.border}` }} />;
+            if (!d) return <div key={`e${i}`} style={{ minHeight:52, background:"#fafafa", borderRight:`1px solid ${G.border}`, borderBottom:`1px solid ${G.border}` }} />;
             const dk=String(d), dayJobs=jobsByDate[dk]||[];
             const dateStr=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
             const isToday=dateStr===todayStr, isSel=sel===d;
             const hasWon=dayJobs.some(j=>j.status==="won");
-            const dayTotal=dayJobs.reduce((s,j)=>s+j.amount,0);
             return (
               <div key={d} onClick={()=>setSel(isSel?null:d)} style={{
-                minHeight:72, padding:"6px 7px", cursor:"pointer", position:"relative",
+                minHeight:52, padding:"4px 4px", cursor:"pointer", position:"relative",
                 borderRight:`1px solid ${G.border}`, borderBottom:`1px solid ${G.border}`,
                 background:isSel?G.mint:isToday?"#f0fdf4":"white",
                 boxShadow:isSel?`inset 0 0 0 2px ${G.light}`:isToday?`inset 0 0 0 1.5px ${G.soft}`:"none",
                 transition:"background .1s",
               }}>
-                <div style={{ display:"flex", justifyContent:"space-between" }}>
-                  <span style={{ fontSize:13, fontWeight:isToday?800:500, color:isToday?G.light:G.text,
-                    background:isToday?G.mint:"transparent", borderRadius:99, padding:isToday?"1px 6px":"0" }}>{d}</span>
-                  {hasWon&&<span style={{ color:G.gold, fontSize:9 }}>★</span>}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ fontSize:12, fontWeight:isToday?800:500, color:isToday?G.light:G.text,
+                    background:isToday?G.mint:"transparent", borderRadius:99, padding:isToday?"1px 5px":"0",
+                    lineHeight:1.4 }}>{d}</span>
+                  {hasWon&&<span style={{ color:G.gold, fontSize:8 }}>★</span>}
                 </div>
-                <div style={{ marginTop:3, display:"flex", flexDirection:"column", gap:2 }}>
-                  {dayJobs.slice(0,2).map(j=>{
-                    const s=STATUSES[j.status]||STATUSES.quote;
-                    return <div key={j.id} style={{ fontSize:10, borderRadius:4, padding:"1px 5px", background:s.bg, color:s.text, borderLeft:`2px solid ${s.dot}`, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{j.billTo||j.customer}</div>;
-                  })}
-                  {dayJobs.length>2&&<div style={{ fontSize:10, color:G.muted, paddingLeft:2 }}>+{dayJobs.length-2} more</div>}
-                </div>
-                {dayTotal>0&&<div style={{ position:"absolute", bottom:4, right:6, fontSize:9, color:G.muted, fontWeight:600 }}>{fmt$(dayTotal)}</div>}
+                {dayJobs.length>0&&(
+                  <div style={{ marginTop:2, display:"flex", flexDirection:"column", gap:1 }}>
+                    {dayJobs.slice(0,1).map(j=>{
+                      const s=STATUSES[j.status]||STATUSES.quote;
+                      return <div key={j.id} style={{ fontSize:9, borderRadius:3, padding:"1px 3px", background:s.bg, color:s.text, borderLeft:`2px solid ${s.dot}`, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{j.billTo||j.customer}</div>;
+                    })}
+                    {dayJobs.length>1&&<div style={{ fontSize:9, color:G.muted }}>+{dayJobs.length-1}</div>}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -665,12 +666,12 @@ function Dashboard({ jobs, onAdd }) {
         <div style={{ background:G.card, borderRadius:16, padding:18, marginBottom:20, boxShadow:`0 2px 12px ${G.border}` }}>
           <h3 style={{ margin:"0 0 12px", fontSize:15, fontWeight:700, color:G.text }}>{MO_NAMES[month]} {sel} — {selJobs.length} job{selJobs.length!==1?"s":""}</h3>
           {selJobs.map(j=>(
-            <div key={j.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${G.border}` }}>
-              <div>
+            <div key={j.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:`1px solid ${G.border}`, gap:8 }}>
+              <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontWeight:600, fontSize:14, color:G.text }}>{j.billTo||j.customer}</div>
-                <div style={{ fontSize:12, color:G.muted }}>{[j.jobName, j.installType, j.projectType, j.projectManager&&`PM: ${j.projectManager}`].filter(Boolean).join(" · ")}</div>
+                <div style={{ fontSize:12, color:G.muted }}>{[j.jobName, j.installType, j.projectType].filter(Boolean).join(" · ")}</div>
               </div>
-              <div style={{ textAlign:"right" }}>
+              <div style={{ textAlign:"right", flexShrink:0 }}>
                 <div style={{ fontWeight:700, color:G.light, fontSize:15 }}>{fmt$(j.amount)}</div>
                 <Badge status={j.status} />
               </div>
@@ -678,29 +679,103 @@ function Dashboard({ jobs, onAdd }) {
           ))}
         </div>
       )}
+
+      {/* ── Recent Jobs ── */}
+      {(() => {
+        const recent = [...jobs].sort((a,b)=>b.id-a.id).slice(0,8);
+        if (!recent.length) return null;
+        return (
+          <div style={{ background:G.card, borderRadius:16, padding:"16px 18px", marginBottom:20, boxShadow:`0 2px 12px ${G.border}` }}>
+            <h3 style={{ margin:"0 0 14px", fontSize:15, fontWeight:700, color:G.text }}>🕐 Recently Added</h3>
+            {recent.map((j,idx)=>(
+              <div key={j.id} onClick={()=>onEdit&&onEdit(j)} style={{
+                display:"flex", alignItems:"center", gap:10, padding:"9px 0",
+                borderBottom:idx<recent.length-1?`1px solid ${G.border}`:"none",
+                cursor:"pointer",
+              }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:600, fontSize:13, color:G.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{j.billTo||j.customer}</div>
+                  <div style={{ fontSize:11, color:G.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{j.jobName||j.address||"—"}</div>
+                </div>
+                <div style={{ textAlign:"right", flexShrink:0 }}>
+                  <div style={{ fontWeight:700, fontSize:13, color:G.light }}>{fmt$(j.amount)}</div>
+                  <Badge status={j.status} />
+                </div>
+                {(j.status==="quote"||j.status==="open"||j.status==="in_progress") && onStatusChange && (
+                  <button
+                    onClick={e=>{ e.stopPropagation(); onStatusChange(j.id, j.status==="quote"?"won":"won"); }}
+                    style={{ padding:"4px 10px", borderRadius:8, border:`1.5px solid ${G.gold}`, background:"#fffbeb", color:G.gold, fontWeight:700, fontSize:11, cursor:"pointer", flexShrink:0 }}>
+                    {j.status==="quote"?"Won":"Done"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* ── Active Jobs This Month ── */}
+      {(() => {
+        const monthJobs = Object.values(jobsByDate).flat()
+          .filter(j=>j.status!=="won"&&j.status!=="lost")
+          .sort((a,b)=>b.id-a.id);
+        if (!monthJobs.length) return null;
+        return (
+          <div style={{ background:G.card, borderRadius:16, padding:"16px 18px", marginBottom:20, boxShadow:`0 2px 12px ${G.border}` }}>
+            <h3 style={{ margin:"0 0 14px", fontSize:15, fontWeight:700, color:G.text }}>📅 Active Jobs — {MO_NAMES[month]}</h3>
+            {monthJobs.map((j,idx)=>(
+              <div key={j.id} onClick={()=>onEdit&&onEdit(j)} style={{
+                display:"flex", alignItems:"center", gap:10, padding:"9px 0",
+                borderBottom:idx<monthJobs.length-1?`1px solid ${G.border}`:"none",
+                cursor:"pointer",
+              }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:600, fontSize:13, color:G.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{j.billTo||j.customer}</div>
+                  <div style={{ fontSize:11, color:G.muted }}>{[j.installType, j.projectManager&&`PM: ${j.projectManager}`, fmtDate(j.start)].filter(Boolean).join(" · ")}</div>
+                </div>
+                <div style={{ textAlign:"right", flexShrink:0 }}>
+                  <div style={{ fontWeight:700, fontSize:13, color:G.light }}>{fmt$(j.amount)}</div>
+                  <Badge status={j.status} />
+                </div>
+                {onStatusChange && (
+                  <button
+                    onClick={e=>{ e.stopPropagation(); onStatusChange(j.id, j.status==="quote"?"won":"won"); }}
+                    style={{ padding:"4px 10px", borderRadius:8, border:`1.5px solid ${G.light}`, background:G.mint, color:G.dark, fontWeight:700, fontSize:11, cursor:"pointer", flexShrink:0 }}>
+                    {j.status==="quote"?"Won":"Complete"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }
 
 // ─── Jobs List ────────────────────────────────────────────────────────────
-function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete }) {
+function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete, onStatusChange }) {
   const [search,       setSearch]       = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [selected,     setSelected]     = useState(new Set());
 
-  const filtered = useMemo(() => jobs.filter(j => {
-    const q = search.toLowerCase();
-    const matchQ = !q
-      || (j.customer||"").toLowerCase().includes(q)
-      || (j.billTo||"").toLowerCase().includes(q)
-      || (j.address||"").toLowerCase().includes(q)
-      || (j.projectManager||"").toLowerCase().includes(q)
-      || (j.salesRep1||"").toLowerCase().includes(q)
-      || (j.quoteHoldNum||"").toLowerCase().includes(q)
-      || (j.notes||"").toLowerCase().includes(q);
-    const matchS = filterStatus==="all" || j.status===filterStatus;
-    return matchQ && matchS;
-  }), [jobs, search, filterStatus]);
+  const filtered = useMemo(() => {
+    const base = [...jobs].sort((a,b)=>b.id-a.id); // newest first
+    return base.filter(j => {
+      const q = search.toLowerCase();
+      const matchQ = !q
+        || (j.customer||"").toLowerCase().includes(q)
+        || (j.billTo||"").toLowerCase().includes(q)
+        || (j.jobName||"").toLowerCase().includes(q)
+        || (j.address||"").toLowerCase().includes(q)
+        || (j.projectManager||"").toLowerCase().includes(q)
+        || (j.salesRep1||"").toLowerCase().includes(q)
+        || (j.quoteHoldNum||"").toLowerCase().includes(q)
+        || (j.notes||"").toLowerCase().includes(q);
+      const matchS = filterStatus==="all" || j.status===filterStatus;
+      return matchQ && matchS;
+    });
+  }, [jobs, search, filterStatus]);
 
   const allIds      = filtered.map(j=>j.id);
   const allChecked  = allIds.length>0 && allIds.every(id=>selected.has(id));
@@ -772,7 +847,25 @@ function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete }) {
             <div style={{ textAlign:"right", flexShrink:0 }}>
               <div style={{ fontWeight:800, fontSize:16, color:G.light }}>{fmt$(j.amount)}</div>
               <div style={{ fontSize:11, color:G.muted }}>{fmtDate(j.start)} → {fmtDate(j.close)}</div>
-              <div style={{ display:"flex", gap:6, marginTop:6, justifyContent:"flex-end" }}>
+              <div style={{ display:"flex", gap:6, marginTop:6, justifyContent:"flex-end", flexWrap:"wrap" }}>
+                {j.status==="quote" && onStatusChange && (
+                  <button onClick={()=>onStatusChange(j.id,"won")}
+                    style={{ padding:"4px 10px", borderRadius:8, border:`1.5px solid ${G.gold}`, background:"#fffbeb", color:G.gold, fontWeight:700, fontSize:11, cursor:"pointer" }}>
+                    🏆 Won
+                  </button>
+                )}
+                {(j.status==="open"||j.status==="in_progress") && onStatusChange && (
+                  <button onClick={()=>onStatusChange(j.id,"won")}
+                    style={{ padding:"4px 10px", borderRadius:8, border:`1.5px solid ${G.light}`, background:G.mint, color:G.dark, fontWeight:700, fontSize:11, cursor:"pointer" }}>
+                    ✓ Complete
+                  </button>
+                )}
+                {(j.status==="quote"||j.status==="open"||j.status==="in_progress") && onStatusChange && (
+                  <button onClick={()=>onStatusChange(j.id,"lost")}
+                    style={{ padding:"4px 8px", borderRadius:8, border:`1.5px solid ${G.border}`, background:"#f9fafb", color:G.muted, fontWeight:700, fontSize:11, cursor:"pointer" }}>
+                    Lost
+                  </button>
+                )}
                 <Btn variant="ghost" small onClick={()=>onEdit(j)}>Edit</Btn>
                 <Btn variant="danger" small onClick={()=>onDelete(j.id)}>🗑</Btn>
               </div>
@@ -784,149 +877,113 @@ function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete }) {
   );
 }
 
-// ─── Golf Ball ────────────────────────────────────────────────────────────
-function GolfBall({ job, onClick }) {
+// ─── Job Chip ─────────────────────────────────────────────────────────────
+function JobChip({ job, onClick }) {
   const s = STATUSES[job.status] || STATUSES.quote;
-  // Label: quote number preferred, else last 5 digits of job id
-  const raw = job.quoteHoldNum || String(job.id);
-  const label = raw.length > 8 ? raw.slice(-7) : raw;
+  const label = job.quoteHoldNum || job.jobName || `#${job.id}`;
+  const display = label.length > 22 ? label.slice(0, 20) + "…" : label;
   const [hov, setHov] = useState(false);
-
   return (
     <div
       onClick={() => onClick(job)}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
-      title={[job.billTo||job.customer, job.jobName, fmt$(job.amount)].filter(Boolean).join("\n")}
+      title={[job.jobName, fmt$(job.amount), job.installType].filter(Boolean).join(" · ")}
       style={{
-        width:52, height:52, borderRadius:"50%",
-        border:`2px solid ${s.dot}`,
-        background: hov ? s.bg : "#ffffff",
-        display:"flex", alignItems:"center", justifyContent:"center",
-        cursor:"pointer", position:"relative", overflow:"hidden",
-        transform: hov ? "scale(1.13)" : "scale(1)",
-        boxShadow: hov ? `0 4px 14px ${s.dot}55` : `0 1px 4px rgba(0,0,0,.08)`,
-        transition:"all .15s",
-        flexShrink:0,
+        display:"inline-flex", alignItems:"center", gap:5,
+        padding:"4px 10px", borderRadius:20,
+        background: hov ? s.bg : "#f7faf8",
+        border:`1.5px solid ${hov ? s.dot : G.border}`,
+        cursor:"pointer", transition:"all .12s",
+        fontSize:12, fontWeight:600, color: hov ? s.text : G.text,
+        boxShadow: hov ? `0 2px 8px ${s.dot}33` : "none",
+        whiteSpace:"nowrap",
       }}>
-      {/* Dimple rings */}
-      <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.18}} viewBox="0 0 52 52">
-        <circle cx="26" cy="26" r="19" fill="none" stroke={s.dot} strokeWidth="0.8" strokeDasharray="2.5 3.5"/>
-        <circle cx="26" cy="26" r="11" fill="none" stroke={s.dot} strokeWidth="0.6" strokeDasharray="1.5 3"/>
-        <circle cx="26" cy="26" r="4"  fill="none" stroke={s.dot} strokeWidth="0.5"/>
-      </svg>
-      <span style={{
-        fontSize: label.length > 6 ? 7 : 8,
-        fontWeight:900, color:s.dot,
-        position:"relative", zIndex:1,
-        textAlign:"center", lineHeight:1.15,
-        padding:"0 3px", wordBreak:"break-all",
-        maxWidth:44,
-      }}>
-        {label}
-      </span>
-    </div>
-  );
-}
-
-// ─── Ball Bucket ──────────────────────────────────────────────────────────
-function BallBucket({ customer, onJobClick }) {
-  const { name, jobs, total } = customer;
-
-  const BALL = 52, GAP = 7, COLS = 3;
-  const ROWS  = Math.ceil(jobs.length / COLS);
-  const gridW = COLS * BALL + (COLS - 1) * GAP;
-  const gridH = ROWS * BALL + (ROWS - 1) * GAP;
-
-  // Bucket geometry (SVG units)
-  const svgW     = gridW + 80;          // card width in SVG units
-  const cx        = svgW / 2;
-  const topRx     = gridW / 2 + 22;     // half-width of rim opening
-  const botRx     = gridW / 2 + 6;      // half-width of base
-  const rimY      = 34;                  // Y centre of top rim
-  const ballsTop  = rimY + 9;            // where balls start
-  const ballsBot  = ballsTop + gridH;
-  const bucketBot = ballsBot + 14;       // Y centre of base
-  const svgH      = bucketBot + 10;
-
-  // Where to render the balls div (pixels from top of svg container)
-  const ballsOffsetTop = ballsTop;
-  const ballsOffsetLeft = (svgW - gridW) / 2;
-
-  return (
-    <div style={{ background:G.card, borderRadius:20, padding:"18px 18px 20px", boxShadow:`0 2px 14px ${G.border}` }}>
-      {/* Header */}
-      <div style={{ fontWeight:800, fontSize:15, color:G.text, marginBottom:2, lineHeight:1.3 }}>{name}</div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-        <span style={{ fontSize:12, color:G.muted }}>{jobs.length} job{jobs.length!==1?"s":""}</span>
-        <span style={{ fontWeight:800, fontSize:15, color:G.light }}>{fmt$(total)}</span>
-      </div>
-
-      {/* Bucket + Balls container */}
-      <div style={{ position:"relative", width:svgW, maxWidth:"100%", margin:"0 auto", height:svgH }}>
-
-        {/* SVG bucket outline — behind balls */}
-        <svg
-          width={svgW} height={svgH}
-          viewBox={`0 0 ${svgW} ${svgH}`}
-          style={{ position:"absolute", top:0, left:0, pointerEvents:"none" }}>
-          {/* Handle arc */}
-          <path
-            d={`M ${cx - topRx * 0.45},${rimY} Q ${cx},${rimY - 24} ${cx + topRx * 0.45},${rimY}`}
-            fill="none" stroke={G.light} strokeWidth="2.5" strokeLinecap="round"/>
-          {/* Top rim ellipse — filled white so balls appear inside */}
-          <ellipse cx={cx} cy={rimY} rx={topRx} ry={8}
-            fill={G.card} stroke={G.light} strokeWidth="2.5"/>
-          {/* Left wall */}
-          <line x1={cx - topRx} y1={rimY} x2={cx - botRx} y2={bucketBot}
-            stroke={G.light} strokeWidth="2.5"/>
-          {/* Right wall */}
-          <line x1={cx + topRx} y1={rimY} x2={cx + botRx} y2={bucketBot}
-            stroke={G.light} strokeWidth="2.5"/>
-          {/* Bottom ellipse */}
-          <ellipse cx={cx} cy={bucketBot} rx={botRx} ry={6}
-            fill={G.card} stroke={G.light} strokeWidth="2.5"/>
-        </svg>
-
-        {/* Balls grid — sits inside the bucket */}
-        <div style={{
-          position:"absolute",
-          top:  ballsOffsetTop,
-          left: ballsOffsetLeft,
-          display:"grid",
-          gridTemplateColumns:`repeat(${COLS}, ${BALL}px)`,
-          gap:GAP,
-        }}>
-          {jobs.map(j => <GolfBall key={j.id} job={j} onClick={onJobClick} />)}
-        </div>
-      </div>
+      <span style={{ width:7, height:7, borderRadius:"50%", background:s.dot, flexShrink:0 }} />
+      {display}
+      <span style={{ fontSize:11, color:G.muted, fontWeight:500 }}>{fmt$(job.amount)}</span>
     </div>
   );
 }
 
 // ─── Customers ────────────────────────────────────────────────────────────
 function CustomersView({ jobs, onJobClick }) {
+  const [search, setSearch] = useState("");
+
   const customers = useMemo(() => {
     const map = {};
     jobs.forEach(j => {
-      const name = j.billTo||j.customer||"Unknown";
+      const name = j.billTo || j.customer || "Unknown";
       if (!map[name]) map[name] = { name, jobs:[], total:0 };
       map[name].jobs.push(j);
       map[name].total += j.amount;
     });
-    return Object.values(map).sort((a,b)=>b.total-a.total);
+    return Object.values(map)
+      .sort((a,b) => b.total - a.total)
+      .map(c => ({
+        ...c,
+        // each customer's jobs sorted newest → oldest
+        jobs: [...c.jobs].sort((a,b) => b.id - a.id),
+      }));
   }, [jobs]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return customers;
+    const q = search.toLowerCase();
+    return customers.filter(c =>
+      c.name.toLowerCase().includes(q) ||
+      c.jobs.some(j => (j.jobName||"").toLowerCase().includes(q) || (j.quoteHoldNum||"").toLowerCase().includes(q))
+    );
+  }, [customers, search]);
 
   return (
     <div>
-      <h1 style={{ margin:"0 0 6px", fontSize:26, fontWeight:800, color:G.text }}>👥 Customers</h1>
-      <p style={{ margin:"0 0 24px", color:G.muted, fontSize:14 }}>
-        Click any ball to open that job &mdash; {customers.length} customers, {jobs.length} total jobs
-      </p>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:18 }}>
-        {customers.map(c => (
-          <BallBucket key={c.name} customer={c} onJobClick={onJobClick} />
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, flexWrap:"wrap", gap:10 }}>
+        <h1 style={{ margin:0, fontSize:26, fontWeight:800, color:G.text }}>👥 Customers</h1>
+        <span style={{ fontSize:13, color:G.muted }}>{customers.length} customers · {jobs.length} jobs</span>
+      </div>
+      <input
+        value={search} onChange={e=>setSearch(e.target.value)}
+        placeholder="Search customers or jobs…"
+        style={{ width:"100%", boxSizing:"border-box", padding:"9px 14px", borderRadius:10, border:`1.5px solid ${G.border}`, fontSize:14, background:G.card, color:G.text, outline:"none", marginBottom:20 }}
+      />
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:16 }}>
+        {filtered.map(c => (
+          <div key={c.name} style={{ background:G.card, borderRadius:18, padding:"16px 18px 18px", boxShadow:`0 2px 12px ${G.border}` }}>
+            {/* Card header */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+              <div style={{ fontWeight:800, fontSize:15, color:G.text, lineHeight:1.3, flex:1, marginRight:8 }}>{c.name}</div>
+              <div style={{ textAlign:"right", flexShrink:0 }}>
+                <div style={{ fontWeight:800, fontSize:15, color:G.light }}>{fmt$(c.total)}</div>
+                <div style={{ fontSize:11, color:G.muted }}>{c.jobs.length} job{c.jobs.length!==1?"s":""}</div>
+              </div>
+            </div>
+            {/* Status summary bar */}
+            {(() => {
+              const counts = {};
+              c.jobs.forEach(j => { counts[j.status] = (counts[j.status]||0)+1; });
+              return (
+                <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:12 }}>
+                  {Object.entries(counts).map(([st,n]) => {
+                    const sv = STATUSES[st]||STATUSES.quote;
+                    return (
+                      <span key={st} style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10, background:sv.bg, color:sv.text }}>
+                        {sv.label} ×{n}
+                      </span>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+            {/* Job chips — newest first */}
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {c.jobs.map(j => <JobChip key={j.id} job={j} onClick={onJobClick} />)}
+            </div>
+          </div>
         ))}
+        {filtered.length === 0 && (
+          <div style={{ gridColumn:"1/-1", textAlign:"center", padding:40, color:G.muted }}>No customers found</div>
+        )}
       </div>
     </div>
   );
@@ -1372,6 +1429,14 @@ export default function CountertopCRM() {
     showToast(isEdit?"Job updated!":"Job added!");
   };
 
+  const handleStatusChange = async (id, newStatus) => {
+    const { error } = await supabase.from("jobs").update({ status: newStatus }).eq("id", id);
+    if (error) { showToast("Error: "+error.message,"error"); return; }
+    await fetchJobs();
+    const msgs = { won:"🏆 Marked as Won!", lost:"Marked as Lost", open:"Marked as Open" };
+    showToast(msgs[newStatus]||"Status updated");
+  };
+
   const handleDelete = async (id) => {
     if (!confirm("Delete this job?")) return;
     const { error } = await supabase.from("jobs").delete().eq("id",id);
@@ -1441,8 +1506,8 @@ export default function CountertopCRM() {
           </div>
         ) : (
           <>
-            {tab==="dashboard" && <Dashboard    jobs={jobs} onAdd={()=>setModal("add")} />}
-            {tab==="jobs"      && <JobsView     jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onDelete={handleDelete} onBulkDelete={handleBulkDelete} />}
+            {tab==="dashboard" && <Dashboard    jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onStatusChange={handleStatusChange} />}
+            {tab==="jobs"      && <JobsView     jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onDelete={handleDelete} onBulkDelete={handleBulkDelete} onStatusChange={handleStatusChange} />}
             {tab==="customers" && <CustomersView jobs={jobs} onJobClick={j=>setModal(j)} />}
             {tab==="import"    && <ImportView   onImportDone={()=>{ fetchJobs(); showToast("Import complete!"); }} />}
             {tab==="map"       && <MapView       jobs={jobs} />}
