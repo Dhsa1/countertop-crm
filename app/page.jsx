@@ -1210,27 +1210,39 @@ function getUrgency(job) {
   return                          { dot:"#ef4444", bg:"#fef2f2", text:"#991b1b", label:">45 days" };
 }
 
+// ─── Archive helpers ──────────────────────────────────────────────────────
+function loadArchivedCustomers() {
+  try { return JSON.parse(localStorage.getItem("crm_archived")||"[]"); } catch { return []; }
+}
+function toggleArchive(name) {
+  const list = loadArchivedCustomers();
+  const idx  = list.indexOf(name);
+  if (idx>=0) list.splice(idx,1); else list.push(name);
+  localStorage.setItem("crm_archived", JSON.stringify(list));
+}
+
+// ─── Quote base parser ────────────────────────────────────────────────────
+// "10229-4" → "10229"   "9172-1" → "9172"   "MISC" → "MISC"
+function baseQuote(q) {
+  if (!q) return null;
+  const m = q.match(/^(.+)-\d+$/);
+  return m ? m[1] : q;
+}
+
 // ─── Job Chip ─────────────────────────────────────────────────────────────
 function JobChip({ job, onClick }) {
   const u = getUrgency(job);
   const label = job.quoteHoldNum || job.jobName || `#${job.id}`;
-  const display = label.length > 22 ? label.slice(0, 20) + "…" : label;
+  const display = label.length > 22 ? label.slice(0,20)+"…" : label;
   const [hov, setHov] = useState(false);
   return (
-    <div
-      onClick={() => onClick(job)}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
+    <div onClick={()=>onClick(job)} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
       title={[job.jobName, fmt$(job.amount), job.close?`Close: ${fmtDate(job.close)}`:"No close date"].filter(Boolean).join(" · ")}
       style={{
-        display:"inline-flex", alignItems:"center", gap:5,
-        padding:"4px 10px", borderRadius:20,
-        background: hov ? u.bg : "#f7faf8",
-        border:`1.5px solid ${hov ? u.dot : u.dot}`,
-        cursor:"pointer", transition:"all .12s",
-        fontSize:12, fontWeight:600, color: hov ? u.text : G.text,
-        boxShadow: hov ? `0 2px 8px ${u.dot}44` : "none",
-        whiteSpace:"nowrap",
+        display:"inline-flex", alignItems:"center", gap:5, padding:"4px 10px", borderRadius:20,
+        background:hov?u.bg:"#f7faf8", border:`1.5px solid ${u.dot}`,
+        cursor:"pointer", transition:"all .12s", fontSize:12, fontWeight:600,
+        color:hov?u.text:G.text, boxShadow:hov?`0 2px 8px ${u.dot}44`:"none", whiteSpace:"nowrap",
       }}>
       <span style={{ width:7, height:7, borderRadius:"50%", background:u.dot, flexShrink:0 }} />
       {display}
@@ -1239,9 +1251,122 @@ function JobChip({ job, onClick }) {
   );
 }
 
+// ─── Quote Group Chip ─────────────────────────────────────────────────────
+// Shows a collapsed parent chip; click expands to show sub-iterations inline
+function QuoteGroupChip({ base, jobs, onClick }) {
+  const [open, setOpen] = useState(false);
+  // Use the urgency of the most urgent sub-job for the parent dot
+  const worst = jobs.reduce((a,b) => {
+    const au = getUrgency(a), bu = getUrgency(b);
+    const order = ["#ef4444","#f59e0b","#16a34a","#9ca3af"];
+    return order.indexOf(au.dot) <= order.indexOf(bu.dot) ? a : b;
+  });
+  const u = getUrgency(worst);
+  const total = jobs.reduce((s,j)=>s+j.amount,0);
+  return (
+    <div style={{ display:"inline-flex", flexDirection:"column", gap:4 }}>
+      {/* Parent chip */}
+      <div onClick={()=>setOpen(o=>!o)}
+        style={{
+          display:"inline-flex", alignItems:"center", gap:5, padding:"4px 10px", borderRadius:20,
+          background:open?u.bg:"#f7faf8", border:`1.5px solid ${u.dot}`,
+          cursor:"pointer", transition:"all .12s", fontSize:12, fontWeight:700,
+          color:open?u.text:G.text, whiteSpace:"nowrap",
+        }}>
+        <span style={{ width:7, height:7, borderRadius:"50%", background:u.dot, flexShrink:0 }} />
+        {base}
+        <span style={{ fontSize:10, fontWeight:800, background:u.dot, color:"#fff", borderRadius:99, padding:"1px 6px" }}>
+          {jobs.length}
+        </span>
+        <span style={{ fontSize:11, color:G.muted, fontWeight:500 }}>{fmt$(total)}</span>
+        <span style={{ fontSize:10, color:G.muted }}>{open?"▲":"▼"}</span>
+      </div>
+      {/* Sub-chips — shown when expanded */}
+      {open && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:4, paddingLeft:10, borderLeft:`2px solid ${u.dot}33` }}>
+          {jobs.map(j=>(
+            <div key={j.id} onClick={()=>onClick(j)}
+              style={{
+                display:"inline-flex", alignItems:"center", gap:4, padding:"3px 9px",
+                borderRadius:16, border:`1.5px solid ${getUrgency(j).dot}`,
+                background:getUrgency(j).bg, cursor:"pointer", fontSize:11, fontWeight:600,
+                color:getUrgency(j).text, whiteSpace:"nowrap", transition:"opacity .1s",
+              }}>
+              <span style={{ width:6, height:6, borderRadius:"50%", background:getUrgency(j).dot, flexShrink:0 }} />
+              {j.quoteHoldNum||`#${j.id}`}
+              <span style={{ fontSize:10, color:G.muted, fontWeight:500 }}>{fmt$(j.amount)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Customer Card ────────────────────────────────────────────────────────
+function CustomerCard({ c, onJobClick, isArchived, onToggleArchive }) {
+  // Group jobs by base quote number
+  const groups = useMemo(() => {
+    const map = {};
+    c.jobs.forEach(j => {
+      const base = baseQuote(j.quoteHoldNum) || `_id_${j.id}`;
+      if (!map[base]) map[base] = { base, jobs:[] };
+      map[base].jobs.push(j);
+    });
+    // Sort groups newest first (by max job id in group)
+    return Object.values(map).sort((a,b)=>Math.max(...b.jobs.map(j=>j.id))-Math.max(...a.jobs.map(j=>j.id)));
+  }, [c.jobs]);
+
+  const statusCounts = useMemo(()=>{
+    const m={};
+    c.jobs.forEach(j=>{ m[j.status]=(m[j.status]||0)+1; });
+    return m;
+  },[c.jobs]);
+
+  return (
+    <div style={{ background:isArchived?"#f9fafb":G.card, borderRadius:18, padding:"16px 18px 18px",
+      boxShadow:`0 2px 12px ${G.border}`, opacity:isArchived?.7:1 }}>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+        <div style={{ fontWeight:800, fontSize:15, color:isArchived?G.muted:G.text, lineHeight:1.3, flex:1, marginRight:8 }}>{c.name}</div>
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4 }}>
+          <div style={{ fontWeight:800, fontSize:15, color:G.light }}>{fmt$(c.total)}</div>
+          <div style={{ fontSize:11, color:G.muted }}>{c.jobs.length} job{c.jobs.length!==1?"s":""}</div>
+          <button onClick={onToggleArchive}
+            style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:8, border:`1px solid ${G.border}`,
+              background:"#f9fafb", color:G.muted, cursor:"pointer", marginTop:2 }}>
+            {isArchived ? "📤 Unarchive" : "📦 Archive"}
+          </button>
+        </div>
+      </div>
+      {/* Status badges */}
+      <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:10 }}>
+        {Object.entries(statusCounts).map(([st,n])=>{
+          const sv=STATUSES[st]||STATUSES.quote;
+          return <span key={st} style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10, background:sv.bg, color:sv.text }}>{sv.label} ×{n}</span>;
+        })}
+      </div>
+      {/* Quote groups */}
+      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+        {groups.map(g => g.jobs.length===1
+          ? <JobChip key={g.base} job={g.jobs[0]} onClick={onJobClick} />
+          : <QuoteGroupChip key={g.base} base={g.base} jobs={g.jobs} onClick={onJobClick} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Customers ────────────────────────────────────────────────────────────
 function CustomersView({ jobs, onJobClick }) {
-  const [search, setSearch] = useState("");
+  const [search,      setSearch]      = useState("");
+  const [showArchived,setShowArchived]= useState(false);
+  const [archived,    setArchived]    = useState(()=>loadArchivedCustomers());
+
+  const handleToggleArchive = name => {
+    toggleArchive(name);
+    setArchived(loadArchivedCustomers());
+  };
 
   const customers = useMemo(() => {
     const map = {};
@@ -1252,36 +1377,39 @@ function CustomersView({ jobs, onJobClick }) {
       map[name].total += j.amount;
     });
     return Object.values(map)
-      .sort((a,b) => b.total - a.total)
-      .map(c => ({
-        ...c,
-        // each customer's jobs sorted newest → oldest
-        jobs: [...c.jobs].sort((a,b) => b.id - a.id),
-      }));
+      .sort((a,b)=>b.total-a.total)
+      .map(c=>({ ...c, jobs:[...c.jobs].sort((a,b)=>b.id-a.id) }));
   }, [jobs]);
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return customers;
+  const active   = useMemo(()=>customers.filter(c=>!archived.includes(c.name)), [customers,archived]);
+  const archList = useMemo(()=>customers.filter(c=> archived.includes(c.name)), [customers,archived]);
+
+  const applySearch = list => {
+    if (!search.trim()) return list;
     const q = search.toLowerCase();
-    return customers.filter(c =>
+    return list.filter(c =>
       c.name.toLowerCase().includes(q) ||
-      c.jobs.some(j => (j.jobName||"").toLowerCase().includes(q) || (j.quoteHoldNum||"").toLowerCase().includes(q))
+      c.jobs.some(j=>(j.jobName||"").toLowerCase().includes(q)||(j.quoteHoldNum||"").toLowerCase().includes(q))
     );
-  }, [customers, search]);
+  };
+
+  const visibleActive   = applySearch(active);
+  const visibleArchived = applySearch(archList);
 
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, flexWrap:"wrap", gap:10 }}>
         <h1 style={{ margin:0, fontSize:26, fontWeight:800, color:G.text }}>👥 Customers</h1>
-        <span style={{ fontSize:13, color:G.muted }}>{customers.length} customers · {jobs.length} jobs</span>
+        <span style={{ fontSize:13, color:G.muted }}>{active.length} active · {archList.length} archived</span>
       </div>
+
       {/* Legend */}
       <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center", marginBottom:14 }}>
-        <span style={{ fontSize:11, fontWeight:700, color:G.muted, textTransform:"uppercase", letterSpacing:.5, marginRight:4 }}>Job chip color:</span>
+        <span style={{ fontSize:11, fontWeight:700, color:G.muted, textTransform:"uppercase", letterSpacing:.5, marginRight:4 }}>Chip color = close date:</span>
         {[
-          { dot:"#16a34a", label:"Close ≤ 14 days" },
-          { dot:"#f59e0b", label:"15–45 days out" },
-          { dot:"#ef4444", label:"> 45 days / no date / overdue" },
+          { dot:"#16a34a", label:"≤ 14 days" },
+          { dot:"#f59e0b", label:"15–45 days" },
+          { dot:"#ef4444", label:"> 45 days / overdue / no date" },
           { dot:"#9ca3af", label:"Lost" },
         ].map(l=>(
           <span key={l.label} style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11, color:G.muted }}>
@@ -1289,51 +1417,38 @@ function CustomersView({ jobs, onJobClick }) {
             {l.label}
           </span>
         ))}
+        <span style={{ fontSize:11, color:G.muted, marginLeft:8 }}>· Chips with a <b>number badge</b> have multiple sub-quotes — click to expand</span>
       </div>
 
-      <input
-        value={search} onChange={e=>setSearch(e.target.value)}
-        placeholder="Search customers or jobs…"
-        style={{ width:"100%", boxSizing:"border-box", padding:"9px 14px", borderRadius:10, border:`1.5px solid ${G.border}`, fontSize:14, background:G.card, color:G.text, outline:"none", marginBottom:20 }}
-      />
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:16 }}>
-        {filtered.map(c => (
-          <div key={c.name} style={{ background:G.card, borderRadius:18, padding:"16px 18px 18px", boxShadow:`0 2px 12px ${G.border}` }}>
-            {/* Card header */}
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
-              <div style={{ fontWeight:800, fontSize:15, color:G.text, lineHeight:1.3, flex:1, marginRight:8 }}>{c.name}</div>
-              <div style={{ textAlign:"right", flexShrink:0 }}>
-                <div style={{ fontWeight:800, fontSize:15, color:G.light }}>{fmt$(c.total)}</div>
-                <div style={{ fontSize:11, color:G.muted }}>{c.jobs.length} job{c.jobs.length!==1?"s":""}</div>
-              </div>
-            </div>
-            {/* Status summary bar */}
-            {(() => {
-              const counts = {};
-              c.jobs.forEach(j => { counts[j.status] = (counts[j.status]||0)+1; });
-              return (
-                <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:12 }}>
-                  {Object.entries(counts).map(([st,n]) => {
-                    const sv = STATUSES[st]||STATUSES.quote;
-                    return (
-                      <span key={st} style={{ fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:10, background:sv.bg, color:sv.text }}>
-                        {sv.label} ×{n}
-                      </span>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-            {/* Job chips — newest first */}
-            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-              {c.jobs.map(j => <JobChip key={j.id} job={j} onClick={onJobClick} />)}
-            </div>
-          </div>
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search customers or jobs…"
+        style={{ width:"100%", boxSizing:"border-box", padding:"9px 14px", borderRadius:10, border:`1.5px solid ${G.border}`, fontSize:14, background:G.card, color:G.text, outline:"none", marginBottom:20 }} />
+
+      {/* Active customers */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:16, marginBottom:24 }}>
+        {visibleActive.map(c=>(
+          <CustomerCard key={c.name} c={c} onJobClick={onJobClick} isArchived={false} onToggleArchive={()=>handleToggleArchive(c.name)} />
         ))}
-        {filtered.length === 0 && (
+        {visibleActive.length===0 && (
           <div style={{ gridColumn:"1/-1", textAlign:"center", padding:40, color:G.muted }}>No customers found</div>
         )}
       </div>
+
+      {/* Archived section */}
+      {archList.length>0 && (
+        <div>
+          <button onClick={()=>setShowArchived(s=>!s)}
+            style={{ display:"flex", alignItems:"center", gap:8, background:"none", border:`1.5px solid ${G.border}`, borderRadius:10, padding:"8px 16px", cursor:"pointer", color:G.muted, fontWeight:600, fontSize:13, marginBottom:16 }}>
+            📦 {showArchived?"Hide":"Show"} Archived ({archList.length})
+          </button>
+          {showArchived && (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:16 }}>
+              {visibleArchived.map(c=>(
+                <CustomerCard key={c.name} c={c} onJobClick={onJobClick} isArchived={true} onToggleArchive={()=>handleToggleArchive(c.name)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
