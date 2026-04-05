@@ -665,7 +665,7 @@ function JobModal({ job, onSave, onClose }) {
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────
-function Dashboard({ jobs, onAdd, onEdit, onStatusChange }) {
+function Dashboard({ jobs, onAdd, onEdit, onStatusChange, onNavigate }) {
   const now = new Date();
   const [year,  setYear]  = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
@@ -716,14 +716,68 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange }) {
   for (let i=0;i<firstDay;i++) cells.push(null);
   for (let d=1;d<=daysInMonth;d++) cells.push(d);
 
-  const StatCard = ({label,value,sub,icon,grad}) => (
-    <div style={{ background:`linear-gradient(135deg,${grad[0]} 0%,${grad[1]} 100%)`, borderRadius:18, padding:20, color:"#fff", boxShadow:`0 4px 16px ${grad[0]}44` }}>
+  const StatCard = ({label,value,sub,icon,grad,onClick}) => (
+    <div onClick={onClick} style={{
+      background:`linear-gradient(135deg,${grad[0]} 0%,${grad[1]} 100%)`, borderRadius:18, padding:20, color:"#fff",
+      boxShadow:`0 4px 16px ${grad[0]}44`, cursor:onClick?"pointer":"default",
+      transition:"transform .12s, box-shadow .12s",
+    }}
+    onMouseEnter={e=>{ if(onClick){ e.currentTarget.style.transform="scale(1.03)"; e.currentTarget.style.boxShadow=`0 8px 24px ${grad[0]}66`; } }}
+    onMouseLeave={e=>{ e.currentTarget.style.transform=""; e.currentTarget.style.boxShadow=`0 4px 16px ${grad[0]}44`; }}>
       <div style={{ fontSize:24, marginBottom:4 }}>{icon}</div>
       <div style={{ fontSize:24, fontWeight:800, letterSpacing:-1 }}>{value}</div>
       <div style={{ fontSize:12, opacity:.85, marginTop:2 }}>{label}</div>
       {sub&&<div style={{ fontSize:11, opacity:.7, marginTop:2 }}>{sub}</div>}
+      {onClick&&<div style={{ fontSize:10, opacity:.6, marginTop:6 }}>tap to view →</div>}
     </div>
   );
+
+  // ── This Week strip ──
+  const WeekStrip = () => {
+    const todayD  = new Date();
+    const dayOfWk = todayD.getDay(); // 0=Sun
+    const weekDays = [];
+    for (let i=0; i<7; i++) {
+      const d = new Date(todayD);
+      d.setDate(todayD.getDate() - dayOfWk + i);
+      const iso = d.toISOString().split("T")[0];
+      const dayJobs = jobs.filter(j => j.start===iso || j.close===iso);
+      const isToday = iso === todayD.toISOString().split("T")[0];
+      weekDays.push({ d, iso, dayJobs, isToday });
+    }
+    const DAY_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    return (
+      <div style={{ background:G.card, borderRadius:16, padding:"14px 16px", marginBottom:20, boxShadow:`0 2px 12px ${G.border}` }}>
+        <div style={{ fontSize:12, fontWeight:700, color:G.muted, textTransform:"uppercase", letterSpacing:.6, marginBottom:10 }}>This Week</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 }}>
+          {weekDays.map(({ d, iso, dayJobs, isToday }) => {
+            const total = dayJobs.reduce((s,j)=>s+j.amount,0);
+            const hasWon = dayJobs.some(j=>j.status==="won");
+            return (
+              <div key={iso} onClick={()=>{ if(dayJobs.length){ setYear(d.getFullYear()); setMonth(d.getMonth()); setSel(d.getDate()); }}}
+                style={{
+                  borderRadius:12, padding:"8px 4px", textAlign:"center", cursor:dayJobs.length?"pointer":"default",
+                  background:isToday?G.dark:dayJobs.length?G.mint:"#f9fafb",
+                  border:`1.5px solid ${isToday?G.light:dayJobs.length?G.soft:G.border}`,
+                  transition:"transform .1s",
+                }}
+                onMouseEnter={e=>{ if(dayJobs.length) e.currentTarget.style.transform="scale(1.04)"; }}
+                onMouseLeave={e=>{ e.currentTarget.style.transform=""; }}>
+                <div style={{ fontSize:10, fontWeight:700, color:isToday?"#fff":G.muted, marginBottom:3 }}>{DAY_SHORT[d.getDay()]}</div>
+                <div style={{ fontSize:14, fontWeight:800, color:isToday?"#fff":G.text }}>{d.getDate()}</div>
+                {dayJobs.length>0
+                  ? <div style={{ fontSize:10, fontWeight:700, color:isToday?G.goldLt:G.light, marginTop:3 }}>{dayJobs.length} job{dayJobs.length!==1?"s":""}</div>
+                  : <div style={{ fontSize:10, color:G.border, marginTop:3 }}>—</div>
+                }
+                {total>0 && <div style={{ fontSize:9, color:isToday?G.mint:G.muted, marginTop:1 }}>{fmt$(total)}</div>}
+                {hasWon && <div style={{ fontSize:9, color:G.goldLt }}>★ won</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -798,12 +852,15 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange }) {
 
       {/* Stats cards */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12, marginBottom:24 }}>
-        <StatCard label="Active Pipeline" value={fmt$(stats.pipeline)} icon="💰" grad={[G.light,G.mid]} />
-        <StatCard label="Won Revenue"     value={fmt$(stats.won)}      icon="🏆" grad={[G.gold,"#8a6a1a"]} />
-        <StatCard label="Open Quotes"     value={stats.quotes}         icon="📋" grad={["#d97706","#b45309"]} sub="awaiting approval" />
-        <StatCard label="Active Jobs"     value={stats.open}           icon="🔧" grad={[G.soft,G.light]} sub="in progress" />
-        <StatCard label="Total Jobs"      value={stats.total}          icon="📅" grad={["#6366f1","#4338ca"]} />
+        <StatCard label="Active Pipeline" value={fmt$(stats.pipeline)} icon="💰" grad={[G.light,G.mid]}         onClick={()=>onNavigate&&onNavigate("jobs","open")} />
+        <StatCard label="Won Revenue"     value={fmt$(stats.won)}      icon="🏆" grad={[G.gold,"#8a6a1a"]}      onClick={()=>onNavigate&&onNavigate("jobs","won")} />
+        <StatCard label="Open Quotes"     value={stats.quotes}         icon="📋" grad={["#d97706","#b45309"]} sub="awaiting approval" onClick={()=>onNavigate&&onNavigate("jobs","quote")} />
+        <StatCard label="Active Jobs"     value={stats.open}           icon="🔧" grad={[G.soft,G.light]} sub="in progress" onClick={()=>onNavigate&&onNavigate("jobs","open")} />
+        <StatCard label="Customers"       value={[...new Set(jobs.map(j=>j.billTo||j.customer))].length} icon="👥" grad={["#6366f1","#4338ca"]} onClick={()=>onNavigate&&onNavigate("customers")} />
       </div>
+
+      {/* This week strip */}
+      <WeekStrip />
 
       {/* ── Monthly Stats Banner ── */}
       <div style={{ background:`linear-gradient(135deg,${G.dark} 0%,${G.mid} 100%)`, borderRadius:16, padding:"16px 22px", marginBottom:20, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
@@ -977,11 +1034,20 @@ const JOB_GROUPS = [
   { key:"lost",    label:"Lost",    statuses:["lost"],                 icon:"📁" },
 ];
 
-function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete, onStatusChange }) {
+function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete, onStatusChange, initialFilter, onFilterUsed }) {
   const [search,    setSearch]    = useState("");
-  const [collapsed, setCollapsed] = useState({ won:true, lost:true });
+  const [collapsed, setCollapsed] = useState(() => {
+    // If navigating to a specific status, expand that group
+    const base = { won:true, lost:true };
+    if (initialFilter==="won")   base.won=false;
+    if (initialFilter==="lost")  base.lost=false;
+    return base;
+  });
   const [exporting, setExporting] = useState(false);
   const [selected,  setSelected]  = useState(new Set());
+
+  // Scroll to the relevant group when arriving from dashboard
+  useEffect(()=>{ if(initialFilter && onFilterUsed) onFilterUsed(); }, []);
 
   const filtered = useMemo(() => {
     const base = [...jobs].sort((a,b)=>b.id-a.id);
@@ -1131,9 +1197,22 @@ function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete, onStatusChange 
   );
 }
 
+// ─── Urgency color for job chips ──────────────────────────────────────────
+// Based on close date proximity. Won/Lost use their own status color.
+function getUrgency(job) {
+  if (job.status==="won")  return { dot:"#16a34a", bg:"#dcfce7", text:"#14532d", label:"Won"    };
+  if (job.status==="lost") return { dot:"#9ca3af", bg:"#f9fafb", text:"#6b7280", label:"Lost"   };
+  if (!job.close)          return { dot:"#ef4444", bg:"#fef2f2", text:"#991b1b", label:"No date" };
+  const days = Math.round((new Date(job.close+"T12:00:00") - new Date()) / 86400000);
+  if (days < 0)            return { dot:"#ef4444", bg:"#fef2f2", text:"#991b1b", label:"Overdue" };
+  if (days <= 14)          return { dot:"#16a34a", bg:"#dcfce7", text:"#14532d", label:"≤14 days" };
+  if (days <= 45)          return { dot:"#f59e0b", bg:"#fffbeb", text:"#92400e", label:"15–45 days" };
+  return                          { dot:"#ef4444", bg:"#fef2f2", text:"#991b1b", label:">45 days" };
+}
+
 // ─── Job Chip ─────────────────────────────────────────────────────────────
 function JobChip({ job, onClick }) {
-  const s = STATUSES[job.status] || STATUSES.quote;
+  const u = getUrgency(job);
   const label = job.quoteHoldNum || job.jobName || `#${job.id}`;
   const display = label.length > 22 ? label.slice(0, 20) + "…" : label;
   const [hov, setHov] = useState(false);
@@ -1142,18 +1221,18 @@ function JobChip({ job, onClick }) {
       onClick={() => onClick(job)}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
-      title={[job.jobName, fmt$(job.amount), job.installType].filter(Boolean).join(" · ")}
+      title={[job.jobName, fmt$(job.amount), job.close?`Close: ${fmtDate(job.close)}`:"No close date"].filter(Boolean).join(" · ")}
       style={{
         display:"inline-flex", alignItems:"center", gap:5,
         padding:"4px 10px", borderRadius:20,
-        background: hov ? s.bg : "#f7faf8",
-        border:`1.5px solid ${hov ? s.dot : G.border}`,
+        background: hov ? u.bg : "#f7faf8",
+        border:`1.5px solid ${hov ? u.dot : u.dot}`,
         cursor:"pointer", transition:"all .12s",
-        fontSize:12, fontWeight:600, color: hov ? s.text : G.text,
-        boxShadow: hov ? `0 2px 8px ${s.dot}33` : "none",
+        fontSize:12, fontWeight:600, color: hov ? u.text : G.text,
+        boxShadow: hov ? `0 2px 8px ${u.dot}44` : "none",
         whiteSpace:"nowrap",
       }}>
-      <span style={{ width:7, height:7, borderRadius:"50%", background:s.dot, flexShrink:0 }} />
+      <span style={{ width:7, height:7, borderRadius:"50%", background:u.dot, flexShrink:0 }} />
       {display}
       <span style={{ fontSize:11, color:G.muted, fontWeight:500 }}>{fmt$(job.amount)}</span>
     </div>
@@ -1196,6 +1275,22 @@ function CustomersView({ jobs, onJobClick }) {
         <h1 style={{ margin:0, fontSize:26, fontWeight:800, color:G.text }}>👥 Customers</h1>
         <span style={{ fontSize:13, color:G.muted }}>{customers.length} customers · {jobs.length} jobs</span>
       </div>
+      {/* Legend */}
+      <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center", marginBottom:14 }}>
+        <span style={{ fontSize:11, fontWeight:700, color:G.muted, textTransform:"uppercase", letterSpacing:.5, marginRight:4 }}>Job chip color:</span>
+        {[
+          { dot:"#16a34a", label:"Close ≤ 14 days" },
+          { dot:"#f59e0b", label:"15–45 days out" },
+          { dot:"#ef4444", label:"> 45 days / no date / overdue" },
+          { dot:"#9ca3af", label:"Lost" },
+        ].map(l=>(
+          <span key={l.label} style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11, color:G.muted }}>
+            <span style={{ width:8, height:8, borderRadius:"50%", background:l.dot, display:"inline-block" }} />
+            {l.label}
+          </span>
+        ))}
+      </div>
+
       <input
         value={search} onChange={e=>setSearch(e.target.value)}
         placeholder="Search customers or jobs…"
@@ -1556,8 +1651,9 @@ function CalendarView({ jobs, onAdd }) {
 
 // ─── App Shell ────────────────────────────────────────────────────────────
 export default function CountertopCRM() {
-  const [tab,     setTab]     = useState("dashboard");
-  const [jobs,    setJobs]    = useState([]);
+  const [tab,        setTab]        = useState("dashboard");
+  const [jobFilter,  setJobFilter]  = useState("all");
+  const [jobs,       setJobs]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState("");
   const [modal,   setModal]   = useState(null);
@@ -1688,8 +1784,8 @@ export default function CountertopCRM() {
           </div>
         ) : (
           <>
-            {tab==="dashboard" && <Dashboard    jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onStatusChange={handleStatusChange} />}
-            {tab==="jobs"      && <JobsView     jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onDelete={handleDelete} onBulkDelete={handleBulkDelete} onStatusChange={handleStatusChange} />}
+            {tab==="dashboard" && <Dashboard    jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onStatusChange={handleStatusChange} onNavigate={(t,f)=>{ setTab(t); if(f) setJobFilter(f); }} />}
+            {tab==="jobs"      && <JobsView     jobs={jobs} onAdd={()=>setModal("add")} onEdit={j=>setModal(j)} onDelete={handleDelete} onBulkDelete={handleBulkDelete} onStatusChange={handleStatusChange} initialFilter={jobFilter} onFilterUsed={()=>setJobFilter("all")} />}
             {tab==="customers" && <CustomersView jobs={jobs} onJobClick={j=>setModal(j)} />}
             {tab==="import"    && <ImportView   onImportDone={()=>{ fetchJobs(); showToast("Import complete!"); }} />}
           </>
