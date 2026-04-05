@@ -741,7 +741,7 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange, onNavigate }) {
       const d = new Date(todayD);
       d.setDate(todayD.getDate() - dayOfWk + i);
       const iso = d.toISOString().split("T")[0];
-      const dayJobs = jobs.filter(j => j.start===iso || j.close===iso);
+      const dayJobs = jobs.filter(j => (j.start||j.close)===iso);
       const isToday = iso === todayD.toISOString().split("T")[0];
       weekDays.push({ d, iso, dayJobs, isToday });
     }
