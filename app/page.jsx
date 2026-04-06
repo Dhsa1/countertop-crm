@@ -21,11 +21,11 @@ const G = {
 };
 
 const STATUSES = {
-  quote:       { label:"Quoted",      bg:"#fffbeb", text:"#92400e", dot:"#f59e0b" },
-  open:        { label:"Open",        bg:"#f0fdf4", text:"#14532d", dot:"#22c55e" },
-  in_progress: { label:"In Progress", bg:"#ecfdf5", text:"#064e3b", dot:"#10b981" },
-  won:         { label:"Won \u2713",  bg:"#dcfce7", text:"#14532d", dot:"#16a34a" },
-  lost:        { label:"Lost",        bg:"#f9fafb", text:"#6b7280", dot:"#9ca3af" },
+  quote:       { label:"Quoted",       bg:"#fffbeb", text:"#92400e", dot:"#f59e0b", icon:"🏌️" },
+  open:        { label:"Open",         bg:"#f0fdf4", text:"#14532d", dot:"#22c55e", icon:"⛳" },
+  in_progress: { label:"In Progress",  bg:"#ecfdf5", text:"#064e3b", dot:"#10b981", icon:"🚩" },
+  won:         { label:"Won ✓",        bg:"#dcfce7", text:"#14532d", dot:"#16a34a", icon:"🏆" },
+  lost:        { label:"Lost",         bg:"#f9fafb", text:"#6b7280", dot:"#9ca3af", icon:"📁" },
 };
 
 const MO_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -396,8 +396,8 @@ function Badge({ status }) {
   const s = STATUSES[status] || STATUSES.quote;
   return (
     <span style={{ background:s.bg, color:s.text, display:"inline-flex", alignItems:"center", gap:4,
-      padding:"2px 10px", borderRadius:99, fontSize:12, fontWeight:600 }}>
-      <span style={{ width:6, height:6, borderRadius:"50%", background:s.dot, display:"inline-block" }} />
+      padding:"2px 10px", borderRadius:99, fontSize:12, fontWeight:600, border:`1px solid ${s.dot}33` }}>
+      <span style={{ fontSize:10, lineHeight:1 }}>{s.icon}</span>
       {s.label}
     </span>
   );
@@ -747,8 +747,8 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange, onNavigate }) {
     }
     const DAY_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     return (
-      <div style={{ background:G.card, borderRadius:16, padding:"14px 16px", marginBottom:20, boxShadow:`0 2px 12px ${G.border}` }}>
-        <div style={{ fontSize:12, fontWeight:700, color:G.muted, textTransform:"uppercase", letterSpacing:.6, marginBottom:10 }}>This Week</div>
+      <div style={{ background:`linear-gradient(135deg,${G.card} 70%,${G.mint} 100%)`, borderRadius:16, padding:"14px 16px", marginBottom:20, boxShadow:`0 2px 12px ${G.border}`, borderLeft:`4px solid ${G.light}` }}>
+        <div style={{ fontSize:12, fontWeight:700, color:G.muted, textTransform:"uppercase", letterSpacing:.6, marginBottom:10 }}>⛳ This Week</div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:6 }}>
           {weekDays.map(({ d, iso, dayJobs, isToday }) => {
             const total = dayJobs.reduce((s,j)=>s+j.amount,0);
@@ -887,8 +887,8 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange, onNavigate }) {
 
       {/* ── Calendar ── */}
       <div style={{ background:G.card, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 12px ${G.border}`, marginBottom:24 }}>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", background:G.mint }}>
-          {WEEKDAYS.map(d=><div key={d} style={{ padding:"8px 0", textAlign:"center", fontSize:11, fontWeight:700, color:G.dark }}>{d.slice(0,1)}</div>)}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", background:`linear-gradient(135deg,${G.dark} 0%,${G.mid} 100%)` }}>
+          {WEEKDAYS.map(d=><div key={d} style={{ padding:"8px 0", textAlign:"center", fontSize:11, fontWeight:700, color:"#e8f5ed" }}>{d.slice(0,1)}</div>)}
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)" }}>
           {cells.map((d,i)=>{
@@ -928,8 +928,8 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange, onNavigate }) {
 
       {/* Selected day detail */}
       {sel && selJobs.length>0 && (
-        <div style={{ background:G.card, borderRadius:16, padding:18, marginBottom:20, boxShadow:`0 2px 12px ${G.border}` }}>
-          <h3 style={{ margin:"0 0 12px", fontSize:15, fontWeight:700, color:G.text }}>{MO_NAMES[month]} {sel} — {selJobs.length} job{selJobs.length!==1?"s":""}</h3>
+        <div style={{ background:G.card, borderRadius:16, padding:18, marginBottom:20, boxShadow:`0 2px 12px ${G.border}`, borderLeft:`4px solid ${G.goldLt}` }}>
+          <h3 style={{ margin:"0 0 12px", fontSize:15, fontWeight:700, color:G.text }}>⛳ {MO_NAMES[month]} {sel} — {selJobs.length} job{selJobs.length!==1?"s":""}</h3>
           {selJobs.map((j,idx)=>(
             <div key={j.id} onClick={()=>onEdit&&onEdit(j)} style={{
               display:"flex", justifyContent:"space-between", alignItems:"center",
@@ -958,7 +958,7 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange, onNavigate }) {
         const recent = [...jobs].sort((a,b)=>b.id-a.id).slice(0,8);
         if (!recent.length) return null;
         return (
-          <div style={{ background:G.card, borderRadius:16, padding:"16px 18px", marginBottom:20, boxShadow:`0 2px 12px ${G.border}` }}>
+          <div style={{ background:G.card, borderRadius:16, padding:"16px 18px", marginBottom:20, boxShadow:`0 2px 12px ${G.border}`, borderLeft:`4px solid ${G.soft}` }}>
             <h3 style={{ margin:"0 0 14px", fontSize:15, fontWeight:700, color:G.text }}>🕐 Recently Added</h3>
             {recent.map((j,idx)=>(
               <div key={j.id} onClick={()=>onEdit&&onEdit(j)} style={{
@@ -994,7 +994,7 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange, onNavigate }) {
           .sort((a,b)=>b.id-a.id);
         if (!monthJobs.length) return null;
         return (
-          <div style={{ background:G.card, borderRadius:16, padding:"16px 18px", marginBottom:20, boxShadow:`0 2px 12px ${G.border}` }}>
+          <div style={{ background:G.card, borderRadius:16, padding:"16px 18px", marginBottom:20, boxShadow:`0 2px 12px ${G.border}`, borderLeft:`4px solid ${G.gold}` }}>
             <h3 style={{ margin:"0 0 14px", fontSize:15, fontWeight:700, color:G.text }}>📅 Active Jobs — {MO_NAMES[month]}</h3>
             {monthJobs.map((j,idx)=>(
               <div key={j.id} onClick={()=>onEdit&&onEdit(j)} style={{
@@ -1073,11 +1073,13 @@ function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete, onStatusChange,
   const toggle           = id => setSelected(prev=>{ const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
   const toggleGroup      = key => setCollapsed(c=>({...c,[key]:!c[key]}));
 
-  const JobRow = ({ j, isLast }) => (
+  const JobRow = ({ j, isLast, rowIdx=0 }) => (
     <div style={{
       display:"flex", alignItems:"flex-start", gap:12, padding:"12px 18px",
       borderBottom:isLast?"none":`1px solid ${G.border}`,
-      background:selected.has(j.id)?G.mint:"white", transition:"background .1s",
+      background:selected.has(j.id)?G.mint:rowIdx%2===1?"#f7fbf8":"white",
+      transition:"background .1s",
+      borderLeft:`3px solid ${STATUSES[j.status]?.dot||G.border}`,
     }}>
       <input type="checkbox" checked={selected.has(j.id)} onChange={()=>toggle(j.id)}
         style={{ width:16, height:16, cursor:"pointer", marginTop:4, accentColor:G.light }} />
@@ -1169,11 +1171,11 @@ function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete, onStatusChange,
           const isOpen  = !collapsed[grp.key];
           const sv      = STATUSES[grp.statuses[0]];
           return (
-            <div key={grp.key} style={{ background:G.card, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 12px ${G.border}` }}>
+            <div key={grp.key} style={{ background:G.card, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 12px ${G.border}`, borderLeft:`4px solid ${sv.dot}` }}>
               {/* Group header */}
               <div onClick={()=>toggleGroup(grp.key)} style={{
                 display:"flex", alignItems:"center", gap:10, padding:"12px 18px",
-                background:`linear-gradient(135deg,${sv.bg} 0%,#fff 100%)`,
+                background:`linear-gradient(135deg,${sv.bg} 0%,#fafff8 60%,#fff 100%)`,
                 cursor:"pointer", userSelect:"none",
                 borderBottom:isOpen?`1px solid ${G.border}`:"none",
               }}>
@@ -1187,7 +1189,7 @@ function JobsView({ jobs, onAdd, onEdit, onDelete, onBulkDelete, onStatusChange,
               </div>
               {/* Rows */}
               {isOpen && grpJobs.map((j,idx)=>(
-                <JobRow key={j.id} j={j} isLast={idx===grpJobs.length-1} />
+                <JobRow key={j.id} j={j} isLast={idx===grpJobs.length-1} rowIdx={idx} />
               ))}
             </div>
           );
@@ -1325,7 +1327,8 @@ function CustomerCard({ c, onJobClick, isArchived, onToggleArchive }) {
 
   return (
     <div style={{ background:isArchived?"#f9fafb":G.card, borderRadius:18, padding:"16px 18px 18px",
-      boxShadow:`0 2px 12px ${G.border}`, opacity:isArchived?.7:1 }}>
+      boxShadow:`0 2px 12px ${G.border}`, opacity:isArchived?.7:1,
+      borderTop:`3px solid ${isArchived?G.border:G.gold}` }}>
       {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
         <div style={{ fontWeight:800, fontSize:15, color:isArchived?G.muted:G.text, lineHeight:1.3, flex:1, marginRight:8 }}>{c.name}</div>
@@ -1570,7 +1573,7 @@ function ImportView({ onImportDone }) {
           style={{ border:`2.5px dashed ${dragging?G.light:G.border}`, borderRadius:20, padding:"48px 32px",
             textAlign:"center", cursor:"pointer", background:dragging?G.mint:G.bg, transition:"all .2s",
             boxShadow:dragging?`0 0 0 4px ${G.light}22`:"none" }}>
-          <div style={{ fontSize:52, marginBottom:14 }}>📥</div>
+          <div style={{ fontSize:52, marginBottom:14 }}>{dragging?"⛳":"📥"}</div>
           <div style={{ fontSize:18, fontWeight:700, color:G.text, marginBottom:6 }}>
             {dragging ? "Drop it!" : "Drop your Excel file here"}
           </div>
@@ -1611,13 +1614,13 @@ function ImportView({ onImportDone }) {
               </Btn>
             </div>
           </div>
-          <div style={{ background:G.card, borderRadius:16, overflow:"hidden", boxShadow:`0 2px 12px ${G.border}` }}>
+          <div style={{ background:G.card, borderRadius:16, overflow:"hidden", boxShadow:`0 2px 12px ${G.border}`, borderTop:`3px solid ${G.light}` }}>
             <div style={{ overflowX:"auto" }}>
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
                 <thead>
-                  <tr style={{ background:G.mint }}>
+                  <tr style={{ background:`linear-gradient(135deg,${G.dark} 0%,${G.mid} 100%)` }}>
                     {["Bill To Customer","Job Name","Quote #","Type","Segment","Project Type","PM","Amount","Status"].map(h=>(
-                      <th key={h} style={{ padding:"9px 12px", textAlign:"left", fontWeight:700, color:G.dark, textTransform:"uppercase", fontSize:11, letterSpacing:.3, whiteSpace:"nowrap" }}>{h}</th>
+                      <th key={h} style={{ padding:"9px 12px", textAlign:"left", fontWeight:700, color:"#e8f5ed", textTransform:"uppercase", fontSize:11, letterSpacing:.3, whiteSpace:"nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1705,8 +1708,8 @@ function CalendarView({ jobs, onAdd }) {
         <button onClick={nextMonth} style={{ background:G.card, border:`1.5px solid ${G.border}`, borderRadius:10, padding:"6px 14px", cursor:"pointer", fontSize:16, color:G.text }}>→</button>
       </div>
       <div style={{ background:G.card, borderRadius:18, overflow:"hidden", boxShadow:`0 2px 12px ${G.border}` }}>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", background:G.mint }}>
-          {WEEKDAYS.map(d=><div key={d} style={{ padding:"10px 0", textAlign:"center", fontSize:12, fontWeight:700, color:G.dark }}>{d}</div>)}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", background:`linear-gradient(135deg,${G.dark} 0%,${G.mid} 100%)` }}>
+          {WEEKDAYS.map(d=><div key={d} style={{ padding:"10px 0", textAlign:"center", fontSize:12, fontWeight:700, color:"#e8f5ed", letterSpacing:.3 }}>{d}</div>)}
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)" }}>
           {cells.map((d,i)=>{
@@ -1838,7 +1841,7 @@ export default function CountertopCRM() {
   return (
     <div style={{ minHeight:"100vh", background:G.bg, fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif" }}>
       {/* Topbar */}
-      <div style={{ background:`linear-gradient(135deg,${G.darkest} 0%,${G.dark} 60%,${G.mid} 100%)`, padding:"0 16px", boxShadow:"0 2px 16px rgba(0,0,0,.35)", position:"sticky", top:0, zIndex:200 }}>
+      <div style={{ background:`linear-gradient(135deg,${G.darkest} 0%,${G.dark} 60%,${G.mid} 100%)`, padding:"0 16px", boxShadow:"0 2px 16px rgba(0,0,0,.35)", position:"sticky", top:0, zIndex:200, borderBottom:`2.5px solid ${G.gold}` }}>
         <div style={{ maxWidth:1280, margin:"0 auto", display:"flex", alignItems:"center" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, padding:"12px 0", marginRight:16, flexShrink:0 }}>
             <div style={{ width:34, height:34, borderRadius:10, background:`linear-gradient(135deg,${G.goldLt},${G.gold})`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, boxShadow:`0 2px 8px ${G.gold}66` }}>⛳</div>
