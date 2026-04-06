@@ -830,6 +830,42 @@ function Dashboard({ jobs, onAdd, onEdit, onStatusChange, onNavigate }) {
           <path d="M630,145 L660,155 L630,165 Z" fill="#e53535"/>
           {/* Fairway stripe highlights */}
           <path d="M0,210 Q200,200 400,207 Q600,213 800,205" fill="none" stroke="#7ae07a" strokeWidth="3" opacity=".35"/>
+
+          {/* ── Rolling golf ball ──
+               Rolls across the grass every 90 s, first play at 10 s.
+               animateMotion path follows the foreground green surface
+               (ball center = grass y − radius); ball shrinks into hole at end. */}
+          <g opacity="0">
+            {/* Motion: moves the whole group along the grass to the hole */}
+            <animateMotion id="golfBallMotion"
+              path="M -55,194 C 180,182 360,175 500,183 C 575,188 612,190 630,192"
+              dur="5s"
+              begin="10s; golfBallMotion.end+85s"
+              fill="remove"
+              calcMode="paced" />
+            {/* Opacity: fade in fast, hold, fade out as ball drops in hole */}
+            <animate attributeName="opacity"
+              values="0;1;1;0" keyTimes="0;0.06;0.87;1"
+              dur="5s"
+              begin="10s; golfBallMotion.end+85s"
+              fill="remove" />
+            {/* Ground shadow under ball */}
+            <ellipse cx="1" cy="9" rx="6" ry="2" fill="rgba(0,0,0,0.18)" />
+            {/* Inner group: spins to show rolling — ~16.7 full rotations over path length */}
+            <g>
+              <animateTransform attributeName="transform" type="rotate"
+                from="0 0 0" to="6000 0 0"
+                dur="5s"
+                begin="10s; golfBallMotion.end+85s"
+                fill="remove" />
+              {/* Ball body */}
+              <circle r="6.5" cx="0" cy="0" fill="white" stroke="#d0d0d0" strokeWidth="0.7" />
+              {/* Dimple arcs — visible during spin so rolling is apparent */}
+              <ellipse cx="0"   cy="-3.2" rx="2.4" ry="1.1" fill="none" stroke="#bbb" strokeWidth="0.75"/>
+              <ellipse cx="3.2" cy="1.6"  rx="1.9" ry="0.9" fill="none" stroke="#bbb" strokeWidth="0.75"/>
+              <ellipse cx="-3.2" cy="1.6" rx="1.9" ry="0.9" fill="none" stroke="#bbb" strokeWidth="0.75"/>
+            </g>
+          </g>
         </svg>
 
         {/* Overlay text + button */}
